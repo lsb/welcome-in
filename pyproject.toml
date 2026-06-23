@@ -1,0 +1,13 @@
+[project]
+name = "welcome-in"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy>=2",
+    "pillow>=12",
+    "onnxruntime>=1.27",
+    "huggingface-hub>=0.30",
+    "llama-cpp-python>=0.3.31",
+]
