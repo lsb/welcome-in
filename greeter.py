@@ -30,12 +30,16 @@ class Greeter:
         self.n_threads = n_threads
         self._llm = None  # lazy
 
+    def load(self) -> "Greeter":
+        """Eagerly load the model (so callers can time it). Returns self."""
+        self._ensure_llm()
+        return self
+
     def _ensure_llm(self):
         if self._llm is None:
             from llama_cpp import Llama
 
             path = ensure_gguf(self.size)
-            print(f"[greeter] loading Qwen3.5-{self.size} (CPU) …")
             self._llm = Llama(
                 model_path=str(path),
                 n_ctx=self.n_ctx,

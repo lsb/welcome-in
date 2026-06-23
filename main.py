@@ -4,10 +4,15 @@ Pipeline:
   1. BlazeFace (ONNX, CPU) detects a face + keypoints and tests frontal pose.
   2. If facing the camera, Qwen3.5 (GGUF, CPU) generates a warm greeting.
 
+On startup we run the whole pipeline once to warm up (load models + JIT the
+inference paths), then run it again "for real" with timing reported — so the
+numbers reflect steady-state latency on the deployment hardware (the Pi).
+
 Usage:
-  uv run python main.py                  # run over 1.png 2.png 3.png with Qwen3.5-0.8B
+  uv run python main.py                  # warmup + real pass over 1.png 2.png 3.png
   uv run python main.py --model 2B       # use the larger model
   uv run python main.py --debug img.png  # show detection metrics
+  uv run python main.py --no-warmup      # skip the warmup pass
   uv run python main.py --setup          # prefetch all models, then exit
 """
 
@@ -15,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 
 DEFAULT_IMAGES = ["1.png", "2.png", "3.png"]
 
@@ -24,35 +30,69 @@ def deliver(text: str) -> None:
     print(f"  \U0001f44b  {text}")
 
 
-def run(images: list[str], model: str, debug: bool) -> None:
-    from face_gate import FaceGate
+def pipeline_pass(gate, greeter, images, debug, announce) -> float:
+    """Run the gate (+ greeter) over every image; print per-stage timing.
 
-    gate = FaceGate()
-    greeter = None  # lazy: only built once someone faces the camera
-
+    Returns the wall-clock seconds for the whole pass. When announce is False
+    (warmup) the greeting text is generated but not printed.
+    """
+    t_total = time.perf_counter()
     for path in images:
-        print(f"\n=== {path} ===")
+        print(f"\n--- {path} ---")
+        t0 = time.perf_counter()
         try:
             res = gate.analyze(path)
         except FileNotFoundError:
             print(f"  (no such image: {path})")
             continue
+        det_ms = (time.perf_counter() - t0) * 1000.0
 
         if debug:
-            print(f"  present={res.person_present} facing={res.facing_camera} "
+            print(f"  [debug] present={res.person_present} facing={res.facing_camera} "
                   f"score={res.score:.2f} conf={res.facing_conf:.2f} "
                   f"metrics={res.metrics} desc={res.description!r}")
 
         if res.person_present and res.facing_camera:
-            if greeter is None:
-                from greeter import Greeter
-
-                greeter = Greeter(size=model)
-            deliver(greeter.greet(res))
+            t1 = time.perf_counter()
+            text = greeter.greet(res)
+            greet_ms = (time.perf_counter() - t1) * 1000.0
+            print(f"  detect {det_ms:5.0f} ms · greet {greet_ms:6.0f} ms")
+            if announce:
+                deliver(text)
         elif res.person_present:
-            print("  (someone is here, but not facing the doorway — staying quiet)")
+            print(f"  detect {det_ms:5.0f} ms · (someone here, not facing — staying quiet)")
         else:
-            print("  (no one here — staying quiet)")
+            print(f"  detect {det_ms:5.0f} ms · (no one here — staying quiet)")
+
+    return time.perf_counter() - t_total
+
+
+def run(images: list[str], model: str, debug: bool, warmup: bool) -> None:
+    from face_gate import FaceGate
+    from greeter import Greeter
+
+    # --- load models (timed) ---
+    print("=== startup ===")
+    t = time.perf_counter()
+    gate = FaceGate()
+    load_face = time.perf_counter() - t
+    print(f"  face detector loaded in {load_face:6.2f} s")
+
+    t = time.perf_counter()
+    greeter = Greeter(size=model).load()
+    load_llm = time.perf_counter() - t
+    print(f"  Qwen3.5-{model} loaded in {load_llm:6.2f} s")
+
+    # --- warmup pass ---
+    if warmup:
+        print("\n=== warmup pass ===")
+        warm = pipeline_pass(gate, greeter, images, debug, announce=False)
+        print(f"\n[warmup] full pass in {warm:.2f} s")
+
+    # --- real pass ---
+    print("\n=== welcome in (real) ===")
+    real = pipeline_pass(gate, greeter, images, debug, announce=True)
+    print(f"\n[timing] full pass in {real:.2f} s")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--model", choices=["0.8B", "2B"], default="0.8B",
                    help="Qwen3.5 size (default: 0.8B)")
     p.add_argument("--debug", action="store_true", help="print detection metrics")
+    p.add_argument("--no-warmup", dest="warmup", action="store_false",
+                   help="skip the startup warmup pass")
     p.add_argument("--setup", action="store_true",
                    help="download all models (face ONNX + both GGUFs) and exit")
     args = p.parse_args(argv)
@@ -73,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     images = args.images if args.images else DEFAULT_IMAGES
-    run(images, args.model, args.debug)
+    run(images, args.model, args.debug, args.warmup)
     return 0
 
 
