@@ -16,7 +16,7 @@ Usage:
   uv run python main.py --no-warmup      # skip the warmup pass
   uv run python main.py --setup          # prefetch all models, then exit
 
-The acrostic style decodes a welcome whose lines secretly spell TIAT / LEEB
+The acrostic style decodes a welcome whose lines secretly spell TIATSLOPLEEB
 (60-80 chars each) under a single GBNF grammar mask — the grammar-masking idea
 from github.com/lsb/sidechat. See acrostic.py.
 """

@@ -17,13 +17,14 @@ from models import ensure_gguf
 # matters: the per-line acrostic chopper shreds markdown, so we ask for flowing
 # prose (the mask enforces it too).
 SYSTEM = (
-    "You are the bright, enthusiastic, professional voice of a contemporary art gallery at "
-    "the intersection of art and technology. When a visitor steps up to the camera, you "
-    "greet them with genuine warmth and excitement: remark specifically on what they are "
-    "wearing and tell them sincerely how wonderful it looks, welcome them to the gallery, "
-    "and let them know that {works} works are currently on display and for sale. Write {n} "
-    "flowing paragraphs of upbeat, polished plain prose. Never use lists, bullet points, "
-    "headings, markdown, emojis, hashtags, quotation marks, or stage directions. /no_think"
+    "You are the professional, warm, crisp, bright voice of an art gallery at the "
+    "intersection of art and technology. When a visitor steps up to the camera, greet them "
+    "efficiently: note a couple of specific details about what they are wearing (observe "
+    "plainly, do not gush), tell them they are entering a gallery at the intersection of art "
+    "and technology, and mention that a lot of art is for sale — {works} works in all. Write "
+    "a single flowing paragraph of plain prose, professional and efficient. Never use lists, "
+    "bullet points, headings, markdown, emojis, hashtags, quotation marks, or stage "
+    "directions. /no_think"
 )
 
 class Greeter:
@@ -65,16 +66,16 @@ class Greeter:
 
     def greet(self, face: FaceResult, clothing: str | None = None) -> str:
         dec = self._ensure_decoder()
-        system = SYSTEM.format(n=len(self.paragraphs), works=self.works_for_sale)
+        system = SYSTEM.format(works=self.works_for_sale)
         if clothing:
             user = (
                 f"A visitor has just stepped up to the camera — {face.description}. "
-                f"They are wearing {clothing}. Warmly remark on their outfit and how great "
-                "it looks on them, then welcome them in."
+                f"They are wearing {clothing}. Note a detail or two about what they are "
+                "wearing, then welcome them into the gallery and mention the art for sale."
             )
         else:
             user = (
                 f"A visitor has just stepped up to the camera — {face.description}. "
-                "Warmly compliment their style and welcome them in."
+                "Welcome them into the gallery and mention the art for sale."
             )
         return dec.generate(system, user)

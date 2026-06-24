@@ -29,8 +29,8 @@ from __future__ import annotations
 import re
 import time
 
-# Two paragraphs: TIAT / LEEB.
-DEFAULT_PARAGRAPHS = ("TIAT", "LEEB")
+# One paragraph spelling TIATSLOPLEEB (12 lines).
+DEFAULT_PARAGRAPHS = ("TIATSLOPLEEB",)
 
 # Characters banned inside a line body, to keep the prose plain (sidechat's
 # "markdown suppression" lesson). GBNF char-class fragment: \\ is a literal
