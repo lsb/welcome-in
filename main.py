@@ -10,10 +10,17 @@ numbers reflect steady-state latency on the deployment hardware (the Pi).
 
 Usage:
   uv run python main.py                  # warmup + real pass over 1.png 2.png 3.png
+  uv run python main.py 2.png            # long, effusive acrostic welcome (default)
+  uv run python main.py --style short    # one or two short sentences
+  uv run python main.py --search         # acrostic: nicer line breaks (~3.5x slower)
   uv run python main.py --model 2B       # use the larger model
   uv run python main.py --debug img.png  # show detection metrics
   uv run python main.py --no-warmup      # skip the warmup pass
   uv run python main.py --setup          # prefetch all models, then exit
+
+The acrostic style decodes a welcome whose lines secretly spell
+ABCD / EFGH / ABCDEFGHIJKL (60-80 chars each), under a grammar mask + local-
+crossing search ported from github.com/lsb/sidechat. See acrostic.py.
 """
 
 from __future__ import annotations
@@ -27,14 +34,19 @@ DEFAULT_IMAGES = ["1.png", "2.png", "3.png"]
 
 def deliver(text: str) -> None:
     """Single seam for greeting output. Console for now; swap for TTS on the Pi."""
-    print(f"  \U0001f44b  {text}")
+    lines = text.splitlines() or [""]
+    print(f"  \U0001f44b  {lines[0]}")
+    for line in lines[1:]:
+        print(f"      {line}")
 
 
-def pipeline_pass(gate, greeter, images, debug, announce) -> float:
+def pipeline_pass(gate, greeter, images, debug, announce, greet=True) -> float:
     """Run the gate (+ greeter) over every image; print per-stage timing.
 
     Returns the wall-clock seconds for the whole pass. When announce is False
-    (warmup) the greeting text is generated but not printed.
+    (warmup) the greeting text is generated but not printed. When greet is False
+    only the detector runs — used to keep the acrostic warmup pass cheap (a full
+    effusive greeting takes tens of seconds; the model is already warm from load).
     """
     t_total = time.perf_counter()
     for path in images:
@@ -52,13 +64,15 @@ def pipeline_pass(gate, greeter, images, debug, announce) -> float:
                   f"score={res.score:.2f} conf={res.facing_conf:.2f} "
                   f"metrics={res.metrics} desc={res.description!r}")
 
-        if res.person_present and res.facing_camera:
+        if res.person_present and res.facing_camera and greet:
             t1 = time.perf_counter()
             text = greeter.greet(res)
             greet_ms = (time.perf_counter() - t1) * 1000.0
             print(f"  detect {det_ms:5.0f} ms · greet {greet_ms:6.0f} ms")
             if announce:
                 deliver(text)
+        elif res.person_present and res.facing_camera:
+            print(f"  detect {det_ms:5.0f} ms · (facing — greeting skipped this pass)")
         elif res.person_present:
             print(f"  detect {det_ms:5.0f} ms · (someone here, not facing — staying quiet)")
         else:
@@ -67,7 +81,8 @@ def pipeline_pass(gate, greeter, images, debug, announce) -> float:
     return time.perf_counter() - t_total
 
 
-def run(images: list[str], model: str, debug: bool, warmup: bool) -> None:
+def run(images: list[str], model: str, debug: bool, warmup: bool,
+        style: str, search: bool, search_R: int) -> None:
     from face_gate import FaceGate
     from greeter import Greeter
 
@@ -79,14 +94,19 @@ def run(images: list[str], model: str, debug: bool, warmup: bool) -> None:
     print(f"  face detector loaded in {load_face:6.2f} s")
 
     t = time.perf_counter()
-    greeter = Greeter(size=model).load()
+    greeter = Greeter(size=model, style=style, search=search, search_R=search_R).load()
     load_llm = time.perf_counter() - t
     print(f"  Qwen3.5-{model} loaded in {load_llm:6.2f} s")
+    if style == "acrostic":
+        print(f"  greeting style: acrostic (search={'on R=%d' % search_R if search else 'off'})")
 
     # --- warmup pass ---
     if warmup:
         print("\n=== warmup pass ===")
-        warm = pipeline_pass(gate, greeter, images, debug, announce=False)
+        # The acrostic greeting is expensive; the model is already warm from load,
+        # so warm only the detector here and save the generation for the real pass.
+        warm = pipeline_pass(gate, greeter, images, debug, announce=False,
+                             greet=(style != "acrostic"))
         print(f"\n[warmup] full pass in {warm:.2f} s")
 
     # --- real pass ---
@@ -101,6 +121,12 @@ def main(argv: list[str] | None = None) -> int:
                    help="image paths (default: 1.png 2.png 3.png)")
     p.add_argument("--model", choices=["0.8B", "2B"], default="0.8B",
                    help="Qwen3.5 size (default: 0.8B)")
+    p.add_argument("--style", choices=["acrostic", "short"], default="acrostic",
+                   help="greeting style (default: acrostic — long & effusive)")
+    p.add_argument("--search", dest="search", action="store_true",
+                   help="acrostic: crossing search for natural line breaks (~3.5x slower)")
+    p.add_argument("--search-R", type=int, default=4,
+                   help="acrostic: max tokens the crossing search may trim per line (default: 4)")
     p.add_argument("--debug", action="store_true", help="print detection metrics")
     p.add_argument("--no-warmup", dest="warmup", action="store_false",
                    help="skip the startup warmup pass")
@@ -115,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     images = args.images if args.images else DEFAULT_IMAGES
-    run(images, args.model, args.debug, args.warmup)
+    run(images, args.model, args.debug, args.warmup, args.style, args.search, args.search_R)
     return 0
 
 
