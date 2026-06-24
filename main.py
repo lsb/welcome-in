@@ -12,15 +12,14 @@ Usage:
   uv run python main.py                  # warmup + real pass over 1.png 2.png 3.png
   uv run python main.py 2.png            # long, effusive acrostic welcome (default)
   uv run python main.py --style short    # one or two short sentences
-  uv run python main.py --search         # acrostic: nicer line breaks (~3.5x slower)
   uv run python main.py --model 2B       # use the larger model
   uv run python main.py --debug img.png  # show detection metrics
   uv run python main.py --no-warmup      # skip the warmup pass
   uv run python main.py --setup          # prefetch all models, then exit
 
-The acrostic style decodes a welcome whose lines secretly spell
-ABCD / EFGH / ABCDEFGHIJKL (60-80 chars each), under a grammar mask + local-
-crossing search ported from github.com/lsb/sidechat. See acrostic.py.
+The acrostic style decodes a welcome whose lines secretly spell TIAT / LEEB
+(60-80 chars each) under a single GBNF grammar mask — the grammar-masking idea
+from github.com/lsb/sidechat. See acrostic.py.
 """
 
 from __future__ import annotations
@@ -81,8 +80,7 @@ def pipeline_pass(gate, greeter, images, debug, announce, greet=True) -> float:
     return time.perf_counter() - t_total
 
 
-def run(images: list[str], model: str, debug: bool, warmup: bool,
-        style: str, search: bool, search_R: int) -> None:
+def run(images: list[str], model: str, debug: bool, warmup: bool, style: str) -> None:
     from face_gate import FaceGate
     from greeter import Greeter
 
@@ -94,11 +92,11 @@ def run(images: list[str], model: str, debug: bool, warmup: bool,
     print(f"  face detector loaded in {load_face:6.2f} s")
 
     t = time.perf_counter()
-    greeter = Greeter(size=model, style=style, search=search, search_R=search_R).load()
+    greeter = Greeter(size=model, style=style).load()
     load_llm = time.perf_counter() - t
     print(f"  Qwen3.5-{model} loaded in {load_llm:6.2f} s")
     if style == "acrostic":
-        print(f"  greeting style: acrostic (search={'on R=%d' % search_R if search else 'off'})")
+        print(f"  greeting style: acrostic ({' '.join(greeter.paragraphs)})")
 
     # --- warmup pass ---
     if warmup:
@@ -123,10 +121,6 @@ def main(argv: list[str] | None = None) -> int:
                    help="Qwen3.5 size (default: 0.8B)")
     p.add_argument("--style", choices=["acrostic", "short"], default="acrostic",
                    help="greeting style (default: acrostic — long & effusive)")
-    p.add_argument("--search", dest="search", action="store_true",
-                   help="acrostic: crossing search for natural line breaks (~3.5x slower)")
-    p.add_argument("--search-R", type=int, default=4,
-                   help="acrostic: max tokens the crossing search may trim per line (default: 4)")
     p.add_argument("--debug", action="store_true", help="print detection metrics")
     p.add_argument("--no-warmup", dest="warmup", action="store_false",
                    help="skip the startup warmup pass")
@@ -141,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     images = args.images if args.images else DEFAULT_IMAGES
-    run(images, args.model, args.debug, args.warmup, args.style, args.search, args.search_R)
+    run(images, args.model, args.debug, args.warmup, args.style)
     return 0
 
 

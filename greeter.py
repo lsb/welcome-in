@@ -7,8 +7,8 @@ visitor actually faces the camera.
 Two styles:
   * "short"    — one or two warm sentences (the original behaviour).
   * "acrostic" — a long, effusive welcome whose lines secretly spell an acrostic,
-                 decoded under a grammar mask + local-crossing search (acrostic.py,
-                 ported from github.com/lsb/sidechat).
+                 decoded under a GBNF grammar mask (acrostic.py, the grammar idea
+                 from github.com/lsb/sidechat).
 """
 
 from __future__ import annotations
@@ -34,24 +34,23 @@ ACROSTIC_SYSTEM = (
     "You are the voice of 'Welcome In', a warm, openhearted, effusive presence at the "
     "doorway of an art gallery. When a visitor turns to look at you, you pour out a long, "
     "generous, heartfelt welcome — vivid, sincere, and overflowing with delight that they "
-    "have arrived and with wonder at the art that awaits them. Write three flowing "
+    "have arrived and with wonder at the art that awaits them. Write {n} flowing "
     "paragraphs of plain prose. Never use lists, bullet points, headings, markdown, "
     "emojis, hashtags, quotation marks, or stage directions. /no_think"
 )
+
+_NUMWORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 class Greeter:
     def __init__(self, size: str = "0.8B", n_ctx: int = 2048, n_threads: int | None = None,
-                 style: str = "acrostic", search: bool = False, search_R: int = 4,
-                 paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS):
+                 style: str = "acrostic", paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS):
         self.size = size
         self.n_ctx = n_ctx
         self.n_threads = n_threads
         self.style = style
-        self.search = search
-        self.search_R = search_R
         self.paragraphs = paragraphs
         self._llm = None       # lazy
         self._decoder = None   # lazy (acrostic style only)
@@ -80,9 +79,7 @@ class Greeter:
         if self._decoder is None:
             from acrostic import AcrosticDecoder
 
-            self._decoder = AcrosticDecoder(
-                self._ensure_llm(), search=self.search, R=self.search_R,
-            )
+            self._decoder = AcrosticDecoder(self._ensure_llm(), paragraphs=self.paragraphs)
         return self._decoder
 
     def greet(self, face: FaceResult) -> str:
@@ -93,11 +90,13 @@ class Greeter:
     # -- styles ----------------------------------------------------------
     def _greet_acrostic(self, face: FaceResult) -> str:
         dec = self._ensure_decoder()
+        n = len(self.paragraphs)
+        system = ACROSTIC_SYSTEM.format(n=_NUMWORDS[n] if n < len(_NUMWORDS) else n)
         user = (
             f"A visitor has just turned to face you — {face.description}. "
             "Pour out a long, effusive, heartfelt welcome into the gallery."
         )
-        return dec.generate(ACROSTIC_SYSTEM, user, self.paragraphs)
+        return dec.generate(system, user)
 
     def _greet_short(self, face: FaceResult) -> str:
         llm = self._ensure_llm()
