@@ -21,22 +21,19 @@ SYSTEM = (
     "intersection of art and technology. When a visitor steps up to the camera, greet them "
     "efficiently: note a couple of specific details about what they are wearing (observe "
     "plainly, do not gush), tell them they are entering a gallery at the intersection of art "
-    "and technology, and mention that a lot of art is for sale — {works} works in all. Write "
-    "a single flowing paragraph of plain prose, professional and efficient. Never use lists, "
-    "bullet points, headings, markdown, emojis, hashtags, quotation marks, or stage "
-    "directions. /no_think"
+    "and technology, and mention that a lot of the art is for sale. Write a single flowing "
+    "paragraph of plain prose, professional and efficient. Never use lists, bullet points, "
+    "headings, markdown, emojis, hashtags, quotation marks, or stage directions. /no_think"
 )
 
 class Greeter:
     # Spell the count out (the model renders a bare digit like 47 as "four seven").
     def __init__(self, size: str = "0.8B", n_ctx: int = 2048, n_threads: int | None = None,
-                 paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
-                 works_for_sale: str = "forty-seven"):
+                 paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS):
         self.size = size
         self.n_ctx = n_ctx
         self.n_threads = n_threads
         self.paragraphs = paragraphs
-        self.works_for_sale = works_for_sale
         self._llm = None       # lazy
         self._decoder = None   # lazy
 
@@ -66,7 +63,7 @@ class Greeter:
 
     def greet(self, face: FaceResult, clothing: str | None = None) -> str:
         dec = self._ensure_decoder()
-        system = SYSTEM.format(works=self.works_for_sale)
+        system = SYSTEM
         if clothing:
             user = (
                 f"A visitor has just stepped up to the camera — {face.description}. "
