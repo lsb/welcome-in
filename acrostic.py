@@ -27,6 +27,7 @@ the run is model-bound anyway, so we dropped it for this one-call grammar.)
 from __future__ import annotations
 
 import re
+import time
 
 # Two paragraphs: TIAT / LEEB.
 DEFAULT_PARAGRAPHS = ("TIAT", "LEEB")
@@ -88,7 +89,8 @@ class AcrosticDecoder:
     pass. Compile once (cheap); reuse `generate()` per visitor."""
 
     def __init__(self, llm, paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
-                 min_line: int = 60, max_line: int = 80, repeat_penalty: float = 1.15):
+                 min_line: int = 60, max_line: int = 80, repeat_penalty: float = 1.15,
+                 temperature: float = 0.8, top_p: float = 0.95, top_k: int = 40):
         from llama_cpp import LlamaGrammar
 
         self.llm = llm
@@ -96,6 +98,11 @@ class AcrosticDecoder:
         self.min_line = min_line
         self.max_line = max_line
         self.repeat_penalty = repeat_penalty
+        # Sampling (temperature > 0) so each visitor gets a different greeting;
+        # the grammar still guarantees the acrostic. temperature=0 → deterministic.
+        self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
         self.gbnf = build_acrostic_gbnf(paragraphs, min_line, max_line)
         self.grammar = LlamaGrammar.from_string(self.gbnf, verbose=False)
         # Plenty of headroom; the grammar + EOS stop generation when complete.
@@ -120,12 +127,14 @@ class AcrosticDecoder:
     def generate(self, system: str, user: str) -> str:
         prompt_ids = self.llm.tokenize(self._render_prompt(system, user).encode(),
                                        add_bos=True, special=True)
-        # The grammar object is reusable: llama-cpp builds a fresh grammar sampler
-        # per generation, so no per-call reset is needed (or exposed).
+        # Seed with epoch seconds so each run (and each visitor, since a greeting
+        # takes seconds) differs — llama-cpp otherwise restarts its RNG from a
+        # fixed default each process, so separate runs would repeat. The grammar
+        # object itself is reusable across calls.
         out = self.llm.create_completion(
             prompt=prompt_ids, max_tokens=self.max_tokens,
-            temperature=0.0, top_k=0, top_p=1.0,
-            repeat_penalty=self.repeat_penalty, grammar=self.grammar,
+            temperature=self.temperature, top_p=self.top_p, top_k=self.top_k,
+            seed=int(time.time()), repeat_penalty=self.repeat_penalty, grammar=self.grammar,
         )
         return _polish_last_line(out["choices"][0]["text"].strip())
 
