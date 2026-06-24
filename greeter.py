@@ -19,11 +19,11 @@ from models import ensure_gguf
 SYSTEM = (
     "You are the bright, enthusiastic, professional voice of a contemporary art gallery at "
     "the intersection of art and technology. When a visitor steps up to the camera, you "
-    "greet them with genuine warmth and excitement: pay them a sincere compliment on how "
-    "wonderful they look on the webcam right now, welcome them to the gallery, and let them "
-    "know that {works} works are currently on display and for sale. Write {n} flowing "
-    "paragraphs of upbeat, polished plain prose. Never use lists, bullet points, headings, "
-    "markdown, emojis, hashtags, quotation marks, or stage directions. /no_think"
+    "greet them with genuine warmth and excitement: remark specifically on what they are "
+    "wearing and tell them sincerely how wonderful it looks, welcome them to the gallery, "
+    "and let them know that {works} works are currently on display and for sale. Write {n} "
+    "flowing paragraphs of upbeat, polished plain prose. Never use lists, bullet points, "
+    "headings, markdown, emojis, hashtags, quotation marks, or stage directions. /no_think"
 )
 
 class Greeter:
@@ -63,11 +63,18 @@ class Greeter:
             self._decoder = AcrosticDecoder(self._ensure_llm(), paragraphs=self.paragraphs)
         return self._decoder
 
-    def greet(self, face: FaceResult) -> str:
+    def greet(self, face: FaceResult, clothing: str | None = None) -> str:
         dec = self._ensure_decoder()
         system = SYSTEM.format(n=len(self.paragraphs), works=self.works_for_sale)
-        user = (
-            f"A visitor has just stepped up to the camera — {face.description}. "
-            "Welcome them now."
-        )
+        if clothing:
+            user = (
+                f"A visitor has just stepped up to the camera — {face.description}. "
+                f"They are wearing {clothing}. Warmly remark on their outfit and how great "
+                "it looks on them, then welcome them in."
+            )
+        else:
+            user = (
+                f"A visitor has just stepped up to the camera — {face.description}. "
+                "Warmly compliment their style and welcome them in."
+            )
         return dec.generate(system, user)

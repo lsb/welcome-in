@@ -38,8 +38,9 @@ def deliver(text: str) -> None:
         print(f"      {line}")
 
 
-def pipeline_pass(gate, greeter, images, debug, announce, greet=True) -> float:
-    """Run the gate (+ greeter) over every image; print per-stage timing.
+def pipeline_pass(gate, greeter, tagger, images, debug, announce, greet=True) -> float:
+    """Run the gate (+ clothing tagger + greeter) over every image; print
+    per-stage timing.
 
     Returns the wall-clock seconds for the whole pass. When announce is False
     (warmup) the greeting text is generated but not printed. When greet is False
@@ -63,10 +64,15 @@ def pipeline_pass(gate, greeter, images, debug, announce, greet=True) -> float:
                   f"metrics={res.metrics} desc={res.description!r}")
 
         if res.person_present and res.facing_camera and greet:
+            t_clip = time.perf_counter()
+            clothing = tagger.describe(path, res.box)
+            clip_ms = (time.perf_counter() - t_clip) * 1000.0
             t1 = time.perf_counter()
-            text = greeter.greet(res)
+            text = greeter.greet(res, clothing)
             greet_ms = (time.perf_counter() - t1) * 1000.0
-            print(f"  detect {det_ms:5.0f} ms · greet {greet_ms:6.0f} ms")
+            print(f"  detect {det_ms:5.0f} ms · clip {clip_ms:5.0f} ms · greet {greet_ms:6.0f} ms")
+            if debug:
+                print(f"  [clothing] {clothing!r}")
             if announce:
                 deliver(text)
         elif res.person_present and res.facing_camera:
@@ -80,6 +86,7 @@ def pipeline_pass(gate, greeter, images, debug, announce, greet=True) -> float:
 
 
 def run(images: list[str], model: str, debug: bool, warmup: bool) -> None:
+    from clip_tags import ClipTagger
     from face_gate import FaceGate
     from greeter import Greeter
 
@@ -87,13 +94,15 @@ def run(images: list[str], model: str, debug: bool, warmup: bool) -> None:
     print("=== startup ===")
     t = time.perf_counter()
     gate = FaceGate()
-    load_face = time.perf_counter() - t
-    print(f"  face detector loaded in {load_face:6.2f} s")
+    print(f"  face detector loaded in {time.perf_counter() - t:6.2f} s")
+
+    t = time.perf_counter()
+    tagger = ClipTagger()
+    print(f"  clothing tagger loaded in {time.perf_counter() - t:6.2f} s")
 
     t = time.perf_counter()
     greeter = Greeter(size=model).load()
-    load_llm = time.perf_counter() - t
-    print(f"  Qwen3.5-{model} loaded in {load_llm:6.2f} s")
+    print(f"  Qwen3.5-{model} loaded in {time.perf_counter() - t:6.2f} s")
     print(f"  acrostic: {' '.join(greeter.paragraphs)}")
 
     # --- warmup pass ---
@@ -101,12 +110,12 @@ def run(images: list[str], model: str, debug: bool, warmup: bool) -> None:
         print("\n=== warmup pass ===")
         # The acrostic greeting is expensive; the model is already warm from load,
         # so warm only the detector here and save the generation for the real pass.
-        warm = pipeline_pass(gate, greeter, images, debug, announce=False, greet=False)
+        warm = pipeline_pass(gate, greeter, tagger, images, debug, announce=False, greet=False)
         print(f"\n[warmup] full pass in {warm:.2f} s")
 
     # --- real pass ---
     print("\n=== welcome in (real) ===")
-    real = pipeline_pass(gate, greeter, images, debug, announce=True)
+    real = pipeline_pass(gate, greeter, tagger, images, debug, announce=True)
     print(f"\n[timing] full pass in {real:.2f} s")
 
 

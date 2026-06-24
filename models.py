@@ -38,6 +38,17 @@ GGUF_REPOS = {
     "2B": ("unsloth/Qwen3.5-2B-GGUF", "Qwen3.5-2B-Q4_K_M.gguf"),
 }
 
+# Clothing tagger — marqo-fashionCLIP (CLIP fine-tuned on fashion), ONNX int8 so
+# it runs on the same onnxruntime as the face detector, no torch. We crop to the
+# visitor's torso and compare the image embedding to candidate phrases. The text
+# encoder is only needed once at startup to embed the (fixed) candidate phrases.
+CLIP_REPO = "Marqo/marqo-fashionCLIP"
+CLIP_FILES = {
+    "vision": "onnx/vision_model_int8.onnx",
+    "text": "onnx/text_model_int8.onnx",
+    "tokenizer": "tokenizer.json",
+}
+
 
 def _face_zip_url() -> str:
     try:
@@ -78,8 +89,22 @@ def ensure_gguf(size: str) -> Path:
     return Path(path)
 
 
+def ensure_clip() -> dict[str, Path]:
+    """Download (cached) the fashionCLIP ONNX + tokenizer; return a dict of paths
+    keyed 'vision', 'text', 'tokenizer'."""
+    from huggingface_hub import hf_hub_download
+
+    HF_CACHE.mkdir(parents=True, exist_ok=True)
+    print(f"[models] resolving {CLIP_REPO} (fashionCLIP) …")
+    return {
+        key: Path(hf_hub_download(repo_id=CLIP_REPO, filename=fn, cache_dir=str(HF_CACHE)))
+        for key, fn in CLIP_FILES.items()
+    }
+
+
 def download_all() -> None:
     ensure_face_model()
     for size in GGUF_REPOS:
         ensure_gguf(size)
+    ensure_clip()
     print("[models] all models present.")
