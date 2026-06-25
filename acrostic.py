@@ -5,8 +5,14 @@ into one GBNF grammar and let llama.cpp mask in C++ over a single generation
 pass. The constraint per line is:
 
   * a forced first letter (the next letter of the secret),
-  * a 60-80 character length,
-  * plain prose only — no markdown/backslash characters in the body, and
+  * a per-line length (default 60-80 chars; tunable, see acrostic_from_env),
+  * a plain-English character whitelist (letters, spaces, and a little
+    punctuation; sentences end on a period or a question mark) — this is also the
+    project's most reliable tone control, since it makes whole classes of
+    off-register output impossible on a tiny model: no digits (hence no invented
+    prices or dates), no emojis, no stray non-English scripts, no markdown, and no
+    '!' (so it cannot exclaim or gush). '?' is allowed: the acrostic now carries
+    the visitor question card (questions.py), which is all questions. See _BODY_CHARS.
   * stealth casing: the forced letter is lowercase mid-sentence (so the prose
     flows and the acrostic hides), uppercase only at the start of a sentence.
 
@@ -26,16 +32,75 @@ the run is model-bound anyway, so we dropped it for this one-call grammar.)
 
 from __future__ import annotations
 
+import os
 import re
 import time
 
-# One paragraph spelling TIATSLOPLEEB (12 lines).
+# One paragraph spelling TIATSLOPLEEB (12 lines), 60-80 chars each. These three
+# defaults define the acrostic's shape and are all overridable from the
+# environment (see acrostic_from_env) — the shape is the strongest lever on the
+# greeting's register, so being able to tune it without code edits matters: a
+# short secret lets the host say its piece and stop (crisp), a long one forces it
+# to keep talking past its content (padded). See greeting-tone notes in greeter.py.
 DEFAULT_PARAGRAPHS = ("TIATSLOPLEEB",)
+DEFAULT_MIN_LINE = 60
+DEFAULT_MAX_LINE = 80
 
-# Characters banned inside a line body, to keep the prose plain (sidechat's
-# "markdown suppression" lesson). GBNF char-class fragment: \\ is a literal
-# backslash; the rest are literal. Excludes: \ * ` # ~ | _ < >.
-_BANNED_CLASS = r"\\*`#~|_<>"
+# Environment variables that override the above (read once per Greeter).
+ACROSTIC_ENV = "WELCOME_ACROSTIC"     # the secret to spell; '|' splits paragraphs
+MIN_LINE_ENV = "WELCOME_MIN_LINE"
+MAX_LINE_ENV = "WELCOME_MAX_LINE"
+
+# WELCOME_ACROSTIC values that switch the acrostic off entirely -> raw, masked-by-
+# nothing model output (markdown, digits, hedging and all). Signalled downstream
+# as an empty paragraphs tuple.
+ACROSTIC_OFF = frozenset({"off", "none", "no", "raw"})
+
+
+def acrostic_from_env() -> tuple[tuple[str, ...], int, int]:
+    """Resolve (paragraphs, min_line, max_line) for the acrostic constraint,
+    letting the environment override the module defaults:
+
+      WELCOME_ACROSTIC   secret to spell, ASCII letters only; '|' separates
+                         paragraphs, e.g. "OPEN" or "HELLO|FRIEND". Other
+                         characters are dropped; empty/unset -> the TIATSLOPLEEB
+                         default. Set to "off" (or none/no/raw) to drop the grammar
+                         mask entirely and get the model's raw, unconstrained slop.
+      WELCOME_MIN_LINE   minimum characters per line (default 60).
+      WELCOME_MAX_LINE   maximum characters per line (default 80).
+
+    Returns paragraphs == () when the acrostic is switched off.
+
+    Examples:
+      WELCOME_ACROSTIC=OPEN WELCOME_MIN_LINE=32 WELCOME_MAX_LINE=48 \\
+        uv run python main.py 2.png      # terser, closer to plain speech
+      WELCOME_ACROSTIC=off uv run python main.py 2.png   # raw model output
+    """
+    raw = os.environ.get(ACROSTIC_ENV, "")
+    if raw.strip().lower() in ACROSTIC_OFF:
+        paragraphs: tuple[str, ...] = ()     # () == acrostic disabled (raw output)
+    else:
+        paragraphs = tuple(
+            cleaned
+            for part in raw.split("|")
+            if (cleaned := "".join(c for c in part if c.isascii() and c.isalpha()))
+        ) or DEFAULT_PARAGRAPHS
+    min_line = int(os.environ.get(MIN_LINE_ENV, DEFAULT_MIN_LINE))
+    max_line = int(os.environ.get(MAX_LINE_ENV, DEFAULT_MAX_LINE))
+    return paragraphs, min_line, max_line
+
+# Allowed characters inside a line body — a whitelist, not a blacklist. On a tiny
+# model the grammar mask is the only *reliable* tone control, so we let it enforce
+# crisp, professional copy at the character level: plain English letters, spaces,
+# and a small punctuation set. This structurally rules out whole failure modes a
+# prompt can't reliably suppress on a 0.8B model — no digits (so no invented
+# prices, percentages, or dates), no emojis, no stray non-English scripts (the
+# Qwen base leaks CJK under sampling), and no markdown. Sentences end on a period
+# or a question mark (see endpunct) — '?' is wanted now that the acrostic carries
+# the visitor question card — but never '!', so it cannot exclaim or gush.
+# (sidechat's "markdown suppression" lesson, taken to its logical end.)
+_BODY_CHARS = r"a-zA-Z ,.;:'?-"     # general body char; may include a mid-line . or ?
+_MID_CHARS = r"a-zA-Z ,;:'-"        # body char that does NOT end a sentence (no . or ?)
 
 
 def build_acrostic_gbnf(paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
@@ -48,8 +113,12 @@ def build_acrostic_gbnf(paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
     (next line capitalises) or not (next line stays lowercase). The last line is
     allowed to be shorter and must end a sentence, for a clean close.
     """
-    lo, hi = min_line - 2, max_line - 2          # body chars before the final char
-    last_lo = last_min_line - 2
+    # body chars before the final char. Clamped to 0 <= lo,last_lo <= hi so that
+    # out-of-range env tuning (e.g. a tiny max_line) can't emit an invalid GBNF
+    # repetition like bodychar{38,28}.
+    hi = max(0, max_line - 2)
+    lo = min(max(0, min_line - 2), hi)
+    last_lo = min(max(0, last_min_line - 2), hi)
 
     # Flatten paragraphs into (forced letter, separator-after-this-line).
     plan: list[tuple[str, str | None]] = []
@@ -66,9 +135,9 @@ def build_acrostic_gbnf(paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
     n = len(plan)
 
     rules = [
-        f"bodychar ::= [^\\n{_BANNED_CLASS}]",
-        f"midchar ::= [^\\n{_BANNED_CLASS}.!?]",
-        "endpunct ::= [.!?]",
+        f"bodychar ::= [{_BODY_CHARS}]",
+        f"midchar ::= [{_MID_CHARS}]",
+        "endpunct ::= [.?]",
         f"bodyHead ::= bodychar{{{lo},{hi}}}",
         "root ::= seg0cap",
     ]
@@ -89,25 +158,43 @@ class AcrosticDecoder:
     pass. Compile once (cheap); reuse `generate()` per visitor."""
 
     def __init__(self, llm, paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
-                 min_line: int = 60, max_line: int = 80, repeat_penalty: float = 1.15,
-                 temperature: float = 0.8, top_p: float = 0.95, top_k: int = 40):
+                 min_line: int = DEFAULT_MIN_LINE, max_line: int = DEFAULT_MAX_LINE,
+                 repeat_penalty: float = 1.2,
+                 temperature: float = 0.3, top_p: float = 0.95, top_k: int = 30,
+                 frequency_penalty: float = 0.4, presence_penalty: float = 0.0):
         from llama_cpp import LlamaGrammar
 
         self.llm = llm
         self.paragraphs = paragraphs
         self.min_line = min_line
         self.max_line = max_line
+        # The acrostic forces ~800 characters of prose out of a 0.8B model that
+        # only has a few true things to say, so left alone it pads and sometimes
+        # loops ("Enjoy it. Let's go." over and over). A modest temperature keeps
+        # it from wandering/inventing; the repeat + frequency penalties keep it
+        # from circling the same phrases while it fills the grammar's length.
         self.repeat_penalty = repeat_penalty
         # Sampling (temperature > 0) so each visitor gets a different greeting;
         # the grammar still guarantees the acrostic. temperature=0 → deterministic.
         self.temperature = temperature
         self.top_p = top_p
         self.top_k = top_k
-        self.gbnf = build_acrostic_gbnf(paragraphs, min_line, max_line)
-        self.grammar = LlamaGrammar.from_string(self.gbnf, verbose=False)
-        # Plenty of headroom; the grammar + EOS stop generation when complete.
-        n_lines = sum(len(s) for s in paragraphs)
-        self.max_tokens = n_lines * max_line + 64
+        self.frequency_penalty = frequency_penalty
+        self.presence_penalty = presence_penalty
+        if paragraphs:
+            self.gbnf = build_acrostic_gbnf(paragraphs, min_line, max_line)
+            self.grammar = LlamaGrammar.from_string(self.gbnf, verbose=False)
+            # Plenty of headroom; the grammar + EOS stop generation when complete.
+            n_lines = sum(len(s) for s in paragraphs)
+            self.max_tokens = n_lines * max_line + 64
+        else:
+            # Acrostic disabled (paragraphs == ()): no grammar mask at all, so the
+            # tiny model's raw, unconstrained output comes straight through —
+            # markdown, digits, hedging and all. EOS usually stops it; the cap is
+            # just a backstop against a rambler.
+            self.gbnf = None
+            self.grammar = None
+            self.max_tokens = 512
         self._formatter = None  # lazy chat formatter
 
     def _render_prompt(self, system: str, user: str) -> str:
@@ -124,19 +211,27 @@ class AcrosticDecoder:
             {"role": "user", "content": user},
         ]).prompt
 
-    def generate(self, system: str, user: str) -> str:
+    def generate(self, system: str, user: str, seed: int | None = None) -> str:
         prompt_ids = self.llm.tokenize(self._render_prompt(system, user).encode(),
                                        add_bos=True, special=True)
         # Seed with epoch seconds so each run (and each visitor, since a greeting
         # takes seconds) differs — llama-cpp otherwise restarts its RNG from a
         # fixed default each process, so separate runs would repeat. The grammar
-        # object itself is reusable across calls.
+        # object itself is reusable across calls. Callers (e.g. the tone harness)
+        # may pass an explicit seed to get distinct samples within one second.
         out = self.llm.create_completion(
             prompt=prompt_ids, max_tokens=self.max_tokens,
             temperature=self.temperature, top_p=self.top_p, top_k=self.top_k,
-            seed=int(time.time()), repeat_penalty=self.repeat_penalty, grammar=self.grammar,
+            seed=int(time.time()) if seed is None else seed,
+            repeat_penalty=self.repeat_penalty,
+            frequency_penalty=self.frequency_penalty,
+            presence_penalty=self.presence_penalty,
+            grammar=self.grammar,   # None when the acrostic is switched off
         )
-        return _polish_last_line(out["choices"][0]["text"].strip())
+        text = out["choices"][0]["text"].strip()
+        # _polish_last_line tidies the acrostic's forced final line; with no
+        # grammar there's no such structure, so return the raw text untouched.
+        return text if self.grammar is None else _polish_last_line(text)
 
 
 def _polish_last_line(text: str) -> str:

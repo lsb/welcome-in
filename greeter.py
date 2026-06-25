@@ -1,47 +1,87 @@
-"""Stage 2 — the greeting.
+"""Stage 2 — the greeting, in two parts.
 
 A small Qwen3.5 (GGUF, CPU via llama-cpp-python) speaks as the gallery's voice.
-It generates a long, effusive welcome whose lines secretly spell an acrostic,
-decoded under a GBNF grammar mask (acrostic.py; the grammar idea from
-github.com/lsb/sidechat). The model is loaded lazily so nothing heavy happens
-until a visitor actually faces the camera.
+Each visitor gets two things, generated as two independent chats:
+
+  Part 1 — the hello: a short, casual, spoken welcome that notes what the visitor
+    is wearing. Generated RAW (no grammar mask), because the terse voice we want is
+    a few plain sentences and the acrostic's line quota only fights that (see the
+    SYSTEM comment below).
+  Part 2 — the question card: a few short, open questions about generative AI, on
+    one of seventeen randomly chosen themes (questions.py), so the visitor argues and
+    wonders for themselves rather than watching passively. Generated UNDER the acrostic
+    mask (acrostic.py; grammar idea from github.com/lsb/sidechat) — its length suits a
+    handful of questions, and the acrostic lives here now instead of in the hello.
+
+The model is loaded lazily so nothing heavy happens until a visitor faces the
+camera; both parts share the one loaded model.
 """
 
 from __future__ import annotations
 
-from acrostic import DEFAULT_PARAGRAPHS
+from dataclasses import dataclass
+
+from acrostic import acrostic_from_env
 from face_gate import FaceResult
 from models import ensure_gguf
+from questions import QUESTIONS_SYSTEM, build_questions_prompt, pick_topic
 
-# The {works}/{n} placeholders are filled per greeting. Plain-prose instruction
-# matters: the per-line acrostic chopper shreds markdown, so we ask for flowing
-# prose (the mask enforces it too).
+# Part 1 register: a short, casual greeting — two or three plain sentences (a quick
+# hi + one compliment, the gallery's name, one practical line), not a speech. Two
+# example greetings carry that register far more reliably than any description; their
+# clothing (corduroy jacket, scarf) is deliberately nothing a real visitor here
+# wears, so any bleed into the output is obvious. Part 1 is always generated raw (no
+# acrostic), so the terse voice is never fought by the line quota — the acrostic now
+# lives in the Part 2 question card instead. Best on the 2B model; a 0.8B is
+# likelier to parrot an example outfit.
 SYSTEM = (
-    "You are the professional, warm, crisp, bright voice of an art gallery at the "
-    "intersection of art and technology. Speak directly to the visitor in the second person "
-    "('you', 'your') as a welcome addressed straight to them — never describe them in the "
-    "third person (no 'the visitor', no 'they'). Efficiently note a couple of specific "
-    "details about what you can see them wearing (observe plainly, do not gush), tell them "
-    "they are entering a gallery at the intersection of art and technology, and mention that "
-    "a lot of the art is for sale. Write a single flowing paragraph of plain prose, "
-    "professional and efficient. Never use lists, bullet points, headings, markdown, emojis, "
-    "hashtags, quotation marks, or stage directions. /no_think"
+    "You are the host at the door of The Intersection of Art and Technology, a gallery "
+    "where art and technology meet. A visitor just walked in. Greet them out loud the way "
+    "a warm, easygoing host actually talks: two or three short sentences, no more. "
+    "Open with a quick hi and one genuine compliment on the most distinctive thing they "
+    "are wearing. Welcome them to the intersection of art and technology. Then close with "
+    "one warm, practical line and stop: invite them to browse as long as they like and "
+    "mention that a lot of the work is for sale. The whole greeting is three short "
+    "sentences, nothing more. Keep it plain and friendly — a hello, not a speech. Do not "
+    "invent details such as prices, discounts, or websites. No gushing, no flourishes, no "
+    "questions, no exclamation marks, no quotation marks.\n\n"
+    "Examples of the right length and tone:\n"
+    "Hi, love the corduroy jacket. Welcome to the intersection of art and technology. "
+    "Stay as long as you like, and a lot of the work here is for sale.\n"
+    "Hi, great scarf. This is the intersection of art and technology; thanks for coming "
+    "in. Browse as long as you want, and a lot of these pieces are for sale. /no_think"
 )
 
+@dataclass
+class Greeting:
+    """What a visitor gets: the spoken hello (Part 1) and the acrostic question
+    card (Part 2) on a randomly chosen theme."""
+    hello: str
+    questions: str
+    topic: str
+
+
 class Greeter:
-    # Spell the count out (the model renders a bare digit like 47 as "four seven").
     def __init__(self, size: str = "0.8B", n_ctx: int = 2048, n_threads: int | None = None,
-                 paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS):
+                 paragraphs: tuple[str, ...] | None = None,
+                 min_line: int | None = None, max_line: int | None = None):
         self.size = size
         self.n_ctx = n_ctx
         self.n_threads = n_threads
-        self.paragraphs = paragraphs
-        self._llm = None       # lazy
-        self._decoder = None   # lazy
+        # The acrostic constraint (used for the Part 2 question card) comes from the
+        # environment (WELCOME_ACROSTIC / WELCOME_MIN_LINE / WELCOME_MAX_LINE) so it
+        # can be tuned without code edits; an explicit argument still wins.
+        env_paragraphs, env_min, env_max = acrostic_from_env()
+        self.paragraphs = env_paragraphs if paragraphs is None else paragraphs
+        self.min_line = env_min if min_line is None else min_line
+        self.max_line = env_max if max_line is None else max_line
+        self._llm = None         # lazy
+        self._hello_dec = None   # lazy: Part 1 hello, raw (no grammar)
+        self._card_dec = None    # lazy: Part 2 question card, acrostic-masked
 
     def load(self) -> "Greeter":
         """Eagerly load the model + compile the grammar (so callers can time it)."""
-        self._ensure_decoder()
+        self._ensure_decoders()
         return self
 
     def _ensure_llm(self):
@@ -56,25 +96,30 @@ class Greeter:
             )
         return self._llm
 
-    def _ensure_decoder(self):
-        if self._decoder is None:
+    def _ensure_decoders(self):
+        if self._hello_dec is None:
             from acrostic import AcrosticDecoder
 
-            self._decoder = AcrosticDecoder(self._ensure_llm(), paragraphs=self.paragraphs)
-        return self._decoder
+            llm = self._ensure_llm()
+            # Part 1 hello: paragraphs=() -> no grammar mask, so the terse voice is
+            # never forced to fill lines. Part 2 card: the configured acrostic.
+            self._hello_dec = AcrosticDecoder(llm, paragraphs=())
+            self._card_dec = AcrosticDecoder(llm, paragraphs=self.paragraphs,
+                                             min_line=self.min_line, max_line=self.max_line)
+        return self._hello_dec, self._card_dec
 
-    def greet(self, face: FaceResult, clothing: str | None = None) -> str:
-        dec = self._ensure_decoder()
-        system = SYSTEM
-        if clothing:
-            user = (
-                "Greet the person now in front of the camera, speaking straight to them as "
-                f"'you'. You can see they are wearing {clothing}. Note a detail or two about "
-                "it, welcome them into the gallery, and mention that much of the art is for sale."
-            )
-        else:
-            user = (
-                "Greet the person now in front of the camera, speaking straight to them as "
-                "'you'. Welcome them into the gallery and mention that much of the art is for sale."
-            )
-        return dec.generate(system, user)
+    def greet(self, face: FaceResult, clothing: str | None = None) -> Greeting:
+        hello_dec, card_dec = self._ensure_decoders()
+        hello = hello_dec.generate(SYSTEM, build_user_prompt(clothing))
+        topic = pick_topic()
+        questions = card_dec.generate(QUESTIONS_SYSTEM, build_questions_prompt(topic))
+        return Greeting(hello=hello, questions=questions, topic=topic)
+
+
+def build_user_prompt(clothing: str | None) -> str:
+    """The per-visitor user turn — deliberately minimal so the system prompt's short,
+    casual register carries the greeting. Kept module-level so the tone harness and
+    the live greeter build the exact same prompt (no drift between test and ship)."""
+    if clothing:
+        return f"A visitor just walked in, wearing {clothing}. Greet them."
+    return "A visitor just walked in. Greet them."

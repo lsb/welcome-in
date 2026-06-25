@@ -2,7 +2,9 @@
 
 Pipeline:
   1. BlazeFace (ONNX, CPU) detects a face + keypoints and tests frontal pose.
-  2. If facing the camera, Qwen3.5 (GGUF, CPU) generates a warm greeting.
+  2. If facing the camera, Qwen3.5 (GGUF, CPU) generates a greeting in two parts:
+     a short spoken hello (Part 1) and a hidden-acrostic card of questions about
+     generative AI for the visitor to chew on (Part 2). See greeter.py / questions.py.
 
 On startup we run the whole pipeline once to warm up (load models + JIT the
 inference paths), then run it again "for real" with timing reported — so the
@@ -10,15 +12,20 @@ numbers reflect steady-state latency on the deployment hardware (the Pi).
 
 Usage:
   uv run python main.py                  # warmup + real pass over 1.png 2.png 3.png
-  uv run python main.py 2.png            # long, effusive acrostic welcome
+  uv run python main.py 2.png            # hello + acrostic question card for one visitor
   uv run python main.py --model 2B       # use the larger model
   uv run python main.py --debug img.png  # show detection metrics
   uv run python main.py --no-warmup      # skip the warmup pass
   uv run python main.py --setup          # prefetch all models, then exit
 
-The acrostic style decodes a welcome whose lines secretly spell TIATSLOPLEEB
-(60-80 chars each) under a single GBNF grammar mask — the grammar-masking idea
-from github.com/lsb/sidechat. See acrostic.py.
+The Part 2 question card's lines secretly spell TIATSLOPLEEB (60-80 chars each)
+under a single GBNF grammar mask — the grammar-masking idea from
+github.com/lsb/sidechat. See acrostic.py.
+
+Tune that acrostic from the environment, no code edits:
+  WELCOME_ACROSTIC=OPEN WELCOME_MIN_LINE=32 WELCOME_MAX_LINE=48 \\
+    uv run python main.py 2.png
+  WELCOME_ACROSTIC=off uv run python main.py 2.png   # card raw, no acrostic
 """
 
 from __future__ import annotations
@@ -45,7 +52,7 @@ def pipeline_pass(gate, greeter, tagger, images, debug, announce, greet=True) ->
     Returns the wall-clock seconds for the whole pass. When announce is False
     (warmup) the greeting text is generated but not printed. When greet is False
     only the detector runs — used to keep the acrostic warmup pass cheap (a full
-    effusive greeting takes tens of seconds; the model is already warm from load).
+    acrostic greeting takes tens of seconds; the model is already warm from load).
     """
     t_total = time.perf_counter()
     for path in images:
@@ -68,13 +75,16 @@ def pipeline_pass(gate, greeter, tagger, images, debug, announce, greet=True) ->
             clothing = tagger.describe(path, res.box)
             clip_ms = (time.perf_counter() - t_clip) * 1000.0
             t1 = time.perf_counter()
-            text = greeter.greet(res, clothing)
+            greeting = greeter.greet(res, clothing)
             greet_ms = (time.perf_counter() - t1) * 1000.0
             print(f"  detect {det_ms:5.0f} ms · clip {clip_ms:5.0f} ms · greet {greet_ms:6.0f} ms")
             if debug:
                 print(f"  [clothing] {clothing!r}")
             if announce:
-                deliver(text)
+                deliver(greeting.hello)
+                print(f"\n      question card — {greeting.topic}")
+                for line in greeting.questions.splitlines():
+                    print(f"      {line}")
         elif res.person_present and res.facing_camera:
             print(f"  detect {det_ms:5.0f} ms · (facing — greeting skipped this pass)")
         elif res.person_present:
@@ -103,13 +113,17 @@ def run(images: list[str], model: str, debug: bool, warmup: bool) -> None:
     t = time.perf_counter()
     greeter = Greeter(size=model).load()
     print(f"  Qwen3.5-{model} loaded in {time.perf_counter() - t:6.2f} s")
-    print(f"  acrostic: {' '.join(greeter.paragraphs)}")
+    if greeter.paragraphs:
+        print(f"  card acrostic: {' '.join(greeter.paragraphs)} "
+              f"(lines {greeter.min_line}-{greeter.max_line} chars)")
+    else:
+        print("  card acrostic: OFF — raw question card (no grammar mask)")
 
     # --- warmup pass ---
     if warmup:
         print("\n=== warmup pass ===")
-        # The acrostic greeting is expensive; the model is already warm from load,
-        # so warm only the detector here and save the generation for the real pass.
+        # The acrostic greeting is expensive (tens of seconds); the model is already
+        # warm from load, so warm only the detector here and save it for the real pass.
         warm = pipeline_pass(gate, greeter, tagger, images, debug, announce=False, greet=False)
         print(f"\n[warmup] full pass in {warm:.2f} s")
 

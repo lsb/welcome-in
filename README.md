@@ -65,6 +65,28 @@ Facing-the-camera thresholds live at the top of `face_gate.py`
 (`DET_THRESH`, `YAW_MAX`, `EAR_LO/HI`, `ROLL_MAX_DEG`). Use `--debug` to see the
 per-image `yaw / ear_ratio / roll` metrics and adjust.
 
+The acrostic constraint is the strongest lever on the greeting's tone, and it's
+tunable from the environment (no code edits) — a short secret lets the host say
+its piece and stop (crisp, plain), a long one forces it to pad past its content:
+
+```bash
+# terse, closer to plain speech: spell OPEN over four 32-48 char lines
+WELCOME_ACROSTIC=OPEN WELCOME_MIN_LINE=32 WELCOME_MAX_LINE=48 \
+  uv run python main.py 2.png
+
+# turn the acrostic off entirely: raw, unconstrained tiny-LLM output
+WELCOME_ACROSTIC=off uv run python main.py 2.png
+```
+
+| var | default | meaning |
+|-----|---------|---------|
+| `WELCOME_ACROSTIC` | `TIATSLOPLEEB` | secret to spell; ASCII letters only, `\|` splits paragraphs (`HELLO\|FRIEND`). `off` (or `none`/`no`/`raw`) drops the grammar mask entirely for raw output |
+| `WELCOME_MIN_LINE` | `60` | min characters per line |
+| `WELCOME_MAX_LINE` | `80` | max characters per line |
+
+The startup banner echoes the active acrostic and line bounds so you can confirm
+the override took.
+
 ## Next steps (not yet wired)
 
 - Live camera frames (picamera2 / a USB cam) feeding `FaceGate.analyze` in a loop.
