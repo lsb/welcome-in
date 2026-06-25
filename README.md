@@ -98,8 +98,9 @@ wait is the show), then the finished question card is **printed** for them to ta
 Wake-word behaviour (all keyed on *facing the camera*, never on mere presence, so
 a flowing exhibit where someone is always in frame still re-arms):
 
-- **Stopper, not passer-by** — a near face must stay frontal for `--dwell` seconds
-  (1.2 default) before the greeting fires, so people walking past don't trip it.
+- **Fire on a near frontal face** — greets as soon as a near visitor faces the
+  camera (`--dwell 0` default). Set `--dwell` above zero to require a *sustained*
+  gaze (e.g. `1.2`) so glancing passers-by don't trip it.
 - **Plural for groups** — every facing face is counted; two or more and the hello
   is addressed to the group ("hi everyone"), complimenting the **closest** person's
   outfit (the one we read with CLIP).
@@ -107,9 +108,15 @@ a flowing exhibit where someone is always in frame still re-arms):
   generation (both llama.cpp and onnxruntime release the GIL), so if nobody faces
   the camera for `--abort-after` seconds (1.5 default) the half-written greeting is
   dropped, nothing prints, and the door re-arms.
+- **Cooldown after a greeting** — once a greeting ends (finished *or* aborted) the
+  door stays quiet for `--cooldown` seconds (3 default) before re-arming. The
+  start/stop gate (near + frontal) is stricter than the "someone's here" presence
+  cue (any detected face), so without this an abort would snap straight back to
+  "someone's here" for a visitor merely angled away — and with `--dwell 0` it would
+  instantly re-greet. The cooldown is the hysteresis that prevents the flap.
 - **Proximity floor** — a face must be at least `--near-prox` box-height (0.10) to
-  count as a near visitor; at a doorway this is the stopper gate and keeps far wall
-  art out of the trigger with no painting-specific logic.
+  count as a near visitor; at a doorway this keeps far wall art and passers-by out
+  of the trigger with no painting-specific logic.
 
 A discreet near-black debug readout in the lower-right exposes every variable that
 drives the gate — face counts, the closest face's pose/proximity, the dwell
@@ -120,7 +127,7 @@ active acrostic/model — invisible across the room, legible up close for tuning
 uv sync                                     # picks up imageio (USB capture)
 uv run python kiosk.py                       # full-screen, default camera + printer
 uv run python kiosk.py --windowed --cam 1    # windowed, second camera
-uv run python kiosk.py --dwell 0.8 --near-prox 0.18   # twitchier trigger, closer-only
+uv run python kiosk.py --dwell 1.2 --cooldown 6       # require a held gaze, longer quiet gap
 WELCOME_PRINTER=off uv run python kiosk.py   # run with no printer attached
 ```
 

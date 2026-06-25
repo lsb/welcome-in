@@ -65,8 +65,8 @@ class Snapshot:
 
 class Kiosk:
     def __init__(self, model: str = "0.8B", cam_index: int = 0, fullscreen: bool = True,
-                 detect_interval: float = 0.1, dwell: float = 1.2, min_show: float = 8.0,
-                 abort_after: float = 1.5, clear_after: float = 4.0,
+                 detect_interval: float = 0.1, dwell: float = 0.0, min_show: float = 8.0,
+                 abort_after: float = 1.5, clear_after: float = 4.0, cooldown: float = 3.0,
                  near_prox: float = 0.10, warmup: bool = True,
                  warmup_image: str = "6.png"):
         self.model = model
@@ -77,6 +77,7 @@ class Kiosk:
         self.min_show = min_show                 # hold a card at least this long
         self.abort_after = abort_after           # stop a greeting once gone this long
         self.clear_after = clear_after           # re-arm once gone this long
+        self.cooldown = cooldown                 # stay quiet this long after a greeting ends
         self.near_prox = near_prox               # min face box height to count as near
         self.warmup = warmup                     # full e2e pass on startup
         self.warmup_image = warmup_image
@@ -224,10 +225,17 @@ class Kiosk:
     def _control_loop(self) -> None:
         """The state machine, driven entirely off published snapshots (it never
         reads the camera). IDLE -> (a near visitor faces for `dwell`) GREETING ->
-        SHOWING -> (audience moves on, or a fresh one is waiting, past `min_show`)
-        IDLE. Keyed on *facing*, never on mere presence: in a flowing exhibit
-        someone is always in frame, so a presence latch would never re-arm."""
-        state, show_since, last_status = "IDLE", 0.0, None
+        SHOWING -> COOLDOWN -> IDLE. Keyed on *facing*, never on mere presence: in a
+        flowing exhibit someone is always in frame, so a presence latch would never
+        re-arm.
+
+        COOLDOWN is a refractory period after every greeting ends. It exists because
+        the gate's start/stop signal (near + frontal) is stricter than the presence
+        signal behind "someone's here" (any detected face): when a greeting aborts
+        — meaning nobody *faced* for abort_after — a visitor merely angled away is
+        still *present*, so without a cooldown the screen snaps straight back to
+        "someone's here", and with dwell=0 it would instantly re-greet, flapping."""
+        state, show_since, cool_since, last_status = "IDLE", 0.0, 0.0, None
         self._post(("state", state))
         while not self._stop.is_set():
             snap = self._snap
@@ -237,8 +245,7 @@ class Kiosk:
                 if status != last_status:
                     self._post(("status", status))
                     last_status = status
-                # Fire only on a *sustained* near-frontal gaze — the visitor who
-                # stops and holds it, not the one who glances past.
+                # Fire once a near face is frontal (and, if dwell>0, has held it).
                 if snap.is_facing and snap.facing_for >= self.dwell:
                     state = "GREETING"
                     self._post(("state", state))
@@ -248,8 +255,8 @@ class Kiosk:
                         state = "SHOWING"
                     except GenerationAborted:
                         self._post(("aborted",))     # audience left mid-greeting
-                        state = "IDLE"
-                        last_status = None
+                        cool_since = time.monotonic()
+                        state = "COOLDOWN"
                     self._post(("state", state))
             elif state == "SHOWING":
                 # Finish-then-re-arm: hold the printed card at least min_show, then
@@ -258,6 +265,13 @@ class Kiosk:
                 if (now - show_since) > self.min_show and (
                         snap.is_facing or snap.gone_for > self.clear_after):
                     self._post(("clear",))
+                    cool_since = time.monotonic()
+                    state = "COOLDOWN"
+                    self._post(("state", state))
+            elif state == "COOLDOWN":
+                # Stay quiet (no re-announce, no re-trigger) until the refractory
+                # period elapses, then re-arm clean.
+                if (now - cool_since) >= self.cooldown:
                     state = "IDLE"
                     last_status = None
                     self._post(("state", state))
@@ -472,10 +486,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--cam", type=int, default=0, help="USB camera index (default: 0)")
     p.add_argument("--windowed", action="store_true",
                    help="run in a window instead of full-screen")
-    p.add_argument("--dwell", type=float, default=1.2,
-                   help="seconds a near visitor must keep facing before greeting (default 1.2)")
+    p.add_argument("--dwell", type=float, default=0.0,
+                   help="seconds a near visitor must keep facing before greeting (default 0)")
     p.add_argument("--abort-after", type=float, default=1.5,
                    help="abort a greeting once nobody has faced for this long (default 1.5)")
+    p.add_argument("--cooldown", type=float, default=3.0,
+                   help="stay quiet this long after a greeting ends, before re-arming (default 3)")
     p.add_argument("--near-prox", type=float, default=0.10,
                    help="min face box height (0..1) to count as a near visitor (default 0.10)")
     p.add_argument("--no-warmup", dest="warmup", action="store_false",
@@ -484,8 +500,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="image for the startup warmup pass (default: 6.png)")
     args = p.parse_args(argv)
     Kiosk(model=args.model, cam_index=args.cam, fullscreen=not args.windowed,
-          dwell=args.dwell, abort_after=args.abort_after, near_prox=args.near_prox,
-          warmup=args.warmup, warmup_image=args.warmup_image).run()
+          dwell=args.dwell, abort_after=args.abort_after, cooldown=args.cooldown,
+          near_prox=args.near_prox, warmup=args.warmup, warmup_image=args.warmup_image).run()
     return 0
 
 
