@@ -38,7 +38,7 @@ _BG = "#0a0a0a"
 
 class Kiosk:
     def __init__(self, model: str = "0.8B", cam_index: int = 0, fullscreen: bool = True,
-                 detect_interval: float = 0.3, min_show: float = 8.0,
+                 detect_interval: float = 0.1, min_show: float = 8.0,
                  clear_after: float = 4.0):
         self.model = model
         self.cam_index = cam_index
@@ -101,7 +101,9 @@ class Kiosk:
                 if not self._stop.is_set():
                     self._post(("error", "camera read failed"))
                 break
+            t_det = time.perf_counter()
             res = self.gate.analyze(frame)
+            det_ms = (time.perf_counter() - t_det) * 1000.0
             now = time.monotonic()
             present = res.person_present
             facing = present and res.facing_camera
@@ -111,6 +113,7 @@ class Kiosk:
             if state == "IDLE":
                 self._post(("status", "someone's here" if present else "waiting"))
                 if facing:
+                    print(f"[kiosk] detect {det_ms:.0f}ms  (frame -> facing)")
                     state = "GREETING"
                     self._greet(frame, res)        # blocks here, streaming to the UI
                     show_since = time.monotonic()
@@ -126,14 +129,19 @@ class Kiosk:
         """Run the expensive path for one visitor: read clothing, stream both
         greeting parts to the screen, then print the finished card."""
         self._post(("begin",))
+        t_clip = time.perf_counter()
         try:
             clothing = self.tagger.describe(frame, res.box)
         except Exception:
             clothing = None
+        clip_ms = (time.perf_counter() - t_clip) * 1000.0
         self._post(("clothing", clothing))
 
+        t_greet = time.perf_counter()
         greeting = self.greeter.greet(
             res, clothing, on_delta=lambda part, d: self._post(("delta", part, d)))
+        greet_ms = (time.perf_counter() - t_greet) * 1000.0
+        print(f"[kiosk] clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
 
         # Snap the screen to the finished, settled text (the streamed text was raw;
         # the printer and this 'settle' both use greeter's polished strings).
@@ -186,9 +194,12 @@ class Kiosk:
         tk.Label(self.root, textvariable=self.topic_var, bg=_BG, fg="#7a7a7a",
                  font=("Helvetica", 18, "italic"), wraplength=wrap,
                  justify="center").pack(pady=(48, 0), padx=120)
+        # The question card reads like the printed card: left-justified monospace,
+        # so each acrostic line starts at the same column and the hidden first-letter
+        # acrostic lines up vertically down the left edge.
         tk.Label(self.root, textvariable=self.card_var, bg=_BG, fg="#e6e6e6",
-                 font=("Helvetica", 22), wraplength=wrap, justify="center").pack(
-                     pady=(16, 0), padx=120)
+                 font=("Courier", 20), wraplength=wrap, justify="left",
+                 anchor="w").pack(pady=(16, 0), padx=120, anchor="w", fill="x")
 
     def _drain(self) -> None:
         try:
