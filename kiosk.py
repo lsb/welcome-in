@@ -386,6 +386,12 @@ class Kiosk:
                  font=("Courier", 11), justify="left").place(
                      relx=1.0, rely=1.0, x=-10, y=-6, anchor="se")
 
+        # Quiet standing byline along the bottom edge, centered and dim so it reads
+        # as a signature rather than competing with the greeting above it.
+        tk.Label(self.root, text="by Lee Butterman", bg=_BG, fg="#555",
+                 font=("Helvetica", 14, "italic")).place(
+                     relx=0.5, rely=1.0, y=-12, anchor="s")
+
     def _drain(self) -> None:
         try:
             while True:
