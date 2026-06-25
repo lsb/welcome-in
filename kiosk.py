@@ -38,6 +38,12 @@ from printer import Printer
 
 _BG = "#0a0a0a"
 
+# What the screen says when nobody's been gated yet — the inviting default that
+# greets the empty gallery instead of a small grey "waiting". The headline rides
+# the big hello label; the line under it rides the italic subtitle.
+_IDLE_HELLO = "WELCOME IN"
+_IDLE_SUBTITLE = "I've been looking for you!"
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -140,7 +146,7 @@ class Kiosk:
                         f"{self.greeter.min_line}-{self.greeter.max_line}", self.model))
             if self.warmup:
                 self._warmup()
-            self._post(("status", "waiting"))
+            self._post(("clear",))   # drop into the standing WELCOME IN screen
         except Exception as e:  # surface startup failures on screen, don't crash silently
             self._post(("error", f"could not start: {e}"))
             return
@@ -241,9 +247,13 @@ class Kiosk:
             snap = self._snap
             now = time.monotonic()
             if state == "IDLE":
-                status = "someone's here" if snap.present else "waiting"
+                # Nobody here → the standing WELCOME IN screen invites them in;
+                # a person present (but not yet gated) gets the quiet "someone's
+                # here" acknowledgement. Only post on the transition.
+                status = "present" if snap.present else "idle"
                 if status != last_status:
-                    self._post(("status", status))
+                    self._post(("status", "someone's here") if snap.present
+                               else ("clear",))
                     last_status = status
                 # Fire once a near face is frontal (and, if dwell>0, has held it).
                 if snap.is_facing and snap.facing_for >= self.dwell:
@@ -348,9 +358,15 @@ class Kiosk:
 
         tk.Label(self.root, textvariable=self.status_var, bg=_BG, fg="#555",
                  font=("Helvetica", 16)).pack(pady=(48, 0))
-        tk.Label(self.root, textvariable=self.hello_var, bg=_BG, fg="#f4f4f4",
-                 font=("Helvetica", 40), wraplength=wrap, justify="center").pack(
-                     pady=(40, 0), padx=120)
+        # The hello label carries two very different headlines: a personal greeting
+        # while we engage someone, and the large standing "WELCOME IN" while we wait.
+        # We hold onto it so the idle screen can swell the font and shrink it back.
+        self._hello_font = ("Helvetica", 40)
+        self._idle_font = ("Helvetica", 96, "bold")
+        self.hello_label = tk.Label(self.root, textvariable=self.hello_var, bg=_BG,
+                 fg="#f4f4f4", font=self._hello_font, wraplength=wrap,
+                 justify="center")
+        self.hello_label.pack(pady=(40, 0), padx=120)
         tk.Label(self.root, textvariable=self.topic_var, bg=_BG, fg="#7a7a7a",
                  font=("Helvetica", 18, "italic"), wraplength=wrap,
                  justify="center").pack(pady=(48, 0), padx=120)
@@ -411,6 +427,7 @@ class Kiosk:
             self._painted.set()
         elif kind == "begin":
             self._hello = self._card = ""
+            self.hello_label.config(font=self._hello_font)
             self.hello_var.set("")
             self.topic_var.set("")
             self.card_var.set("")
@@ -434,19 +451,22 @@ class Kiosk:
                                 if self.printer.enabled
                                 else "linger on these as long as you like")
         elif kind == "clear":
-            self._hello = self._card = ""
-            self.hello_var.set("")
-            self.topic_var.set("")
-            self.card_var.set("")
-            self.status_var.set("waiting")
+            self._idle()
         elif kind == "aborted":
             # The audience walked off mid-greeting: drop the half-written card,
             # print nothing, and quietly re-arm for the next visitor.
-            self._hello = self._card = ""
-            self.hello_var.set("")
-            self.topic_var.set("")
-            self.card_var.set("")
-            self.status_var.set("waiting")
+            self._idle()
+
+    def _idle(self) -> None:
+        """Return the screen to its inviting standing state: a large WELCOME IN
+        over its subtitle, with no half-written card left behind. This is what the
+        empty gallery shows while we wait for someone to gate."""
+        self._hello = self._card = ""
+        self.hello_label.config(font=self._idle_font)
+        self.hello_var.set(_IDLE_HELLO)
+        self.topic_var.set(_IDLE_SUBTITLE)
+        self.card_var.set("")
+        self.status_var.set("")
 
     def _render_debug(self) -> None:
         """Paint the discreet lower-right readout from the latest variables. Every
