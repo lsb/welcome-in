@@ -18,7 +18,7 @@ Usage:
   uv run python main.py --no-warmup      # skip the warmup pass
   uv run python main.py --setup          # prefetch all models, then exit
 
-The Part 2 question card's lines secretly spell SLOPSLOPSLOPTIATLEEB (10-100 chars each)
+The Part 2 question card's lines secretly spell SLOPLEEB (10-100 chars each)
 under a single GBNF grammar mask — the grammar-masking idea from
 github.com/lsb/sidechat. See acrostic.py.
 

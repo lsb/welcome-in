@@ -80,7 +80,7 @@ WELCOME_ACROSTIC=off uv run python main.py 2.png
 
 | var | default | meaning |
 |-----|---------|---------|
-| `WELCOME_ACROSTIC` | `SLOPSLOPSLOPTIATLEEB` | secret to spell; ASCII letters only, `\|` splits paragraphs (`HELLO\|FRIEND`). `off` (or `none`/`no`/`raw`) drops the grammar mask entirely for raw output |
+| `WELCOME_ACROSTIC` | `SLOPLEEB` | secret to spell; ASCII letters only, `\|` splits paragraphs (`HELLO\|FRIEND`). `off` (or `none`/`no`/`raw`) drops the grammar mask entirely for raw output |
 | `WELCOME_MIN_LINE` | `10` | min characters per line |
 | `WELCOME_MAX_LINE` | `100` | max characters per line |
 
