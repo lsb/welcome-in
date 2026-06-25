@@ -157,7 +157,16 @@ class Kiosk:
         self.root.title("welcome-in")
         self.root.configure(bg=_BG)
         if self.fullscreen:
+            # "-fullscreen" is a *request* to the window manager. Set immediately
+            # after Tk() — before the window is mapped — the WM can drop it, and
+            # since this branch sets no geometry the window then shrinks to fit its
+            # (nearly empty) labels: the "tiny window" failure. Make it
+            # deterministic — size to the whole screen as a floor, then re-assert
+            # fullscreen once the window is actually on screen.
+            sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+            self.root.geometry(f"{sw}x{sh}+0+0")
             self.root.attributes("-fullscreen", True)
+            self.root.after(200, lambda: self.root.attributes("-fullscreen", True))
         else:
             self.root.geometry("1100x800")
         self.root.bind("<Escape>", lambda e: self._on_close())
