@@ -53,6 +53,7 @@ class Kiosk:
 
         self._q: queue.Queue = queue.Queue()
         self._stop = threading.Event()
+        self._painted = threading.Event()   # UI-thread handshake (see _flush_ui)
         self._closing = False
         self._thread: threading.Thread | None = None
 
@@ -75,6 +76,15 @@ class Kiosk:
 
     def _post(self, msg: tuple) -> None:
         self._q.put(msg)
+
+    def _flush_ui(self, timeout: float = 1.0) -> None:
+        """Block the worker until the UI thread has painted everything queued so
+        far. Called right before the long LLM generation so the clothing line is
+        on screen first — and since the worker waits here while the cores are
+        still idle, that paint isn't starved by the generation that follows."""
+        self._painted.clear()
+        self._post(("flush",))
+        self._painted.wait(timeout)
 
     # -- worker: load, then capture/detect/greet loop --------------------
     def _run(self) -> None:
@@ -169,6 +179,7 @@ class Kiosk:
             clothing = None
         clip_ms = (time.perf_counter() - t_clip) * 1000.0
         self._post(("clothing", clothing))
+        self._flush_ui()   # paint the appearance line before the LLM generation starts
 
         t_greet = time.perf_counter()
         greeting = self.greeter.greet(
@@ -261,6 +272,9 @@ class Kiosk:
             _, det, clip, greet = msg
             self.timing_var.set(
                 f"detect {det:.0f}ms  clip {clip:.0f}ms  greet {greet / 1000:.1f}s")
+        elif kind == "flush":
+            self.root.update_idletasks()   # force pending label repaints to land now
+            self._painted.set()
         elif kind == "begin":
             self._hello = self._card = ""
             self.hello_var.set("")
