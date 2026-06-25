@@ -102,22 +102,44 @@ class ClipTagger:
         emb = self._vis.run(None, {"pixel_values": pixel_values})[0][0]
         return emb / (np.linalg.norm(emb) + 1e-9)
 
-    def describe(self, image, box=None) -> str | None:
-        """Return a short clothing description like 'a red hoodie, in a casual
-        style' (or '… and a hat …'), or None if nothing is read confidently."""
+    def _read(self, image, box):
+        """Shared read: embed the torso crop and pick the top tag per attribute
+        group. Returns (color, garment, style, has_hat), or None when no garment is
+        read confidently (e.g. no clear person in the crop)."""
         ie = self._embed_image(image, box)
         color, _ = self._top("color", ie)
         garment, gconf = self._top("garment", ie)
         if gconf < _MIN_CONF:
             return None
         style, _ = self._top("style", ie)
-
-        desc = f"{_article(color)} {color} {garment}"
         labels, hat_emb = self._groups["hat"]
         hat_sims = hat_emb @ ie
-        if hat_sims[labels.index("hat")] - hat_sims[labels.index("nohat")] >= _HAT_MARGIN:
+        has_hat = (hat_sims[labels.index("hat")]
+                   - hat_sims[labels.index("nohat")] >= _HAT_MARGIN)
+        return color, garment, style, has_hat
+
+    def describe(self, image, box=None) -> str | None:
+        """Return a short clothing description like 'a red hoodie, in a casual
+        style' (or '… and a hat …'), or None if nothing is read confidently."""
+        read = self._read(image, box)
+        if read is None:
+            return None
+        color, garment, style, has_hat = read
+        desc = f"{_article(color)} {color} {garment}"
+        if has_hat:
             desc += " and a hat"
         return f"{desc}, in {_article(style)} {style} style"
+
+    def compliment(self, image, box=None) -> str | None:
+        """The single most distinctive thing the visitor is wearing, as a bare noun
+        phrase for the templated hello — e.g. 'red hoodie' (no article, no style
+        clause), or None if nothing is read confidently. Part 1 drops this straight
+        into a 'love the {…}' template, so it has to read as a noun."""
+        read = self._read(image, box)
+        if read is None:
+            return None
+        color, garment, _style, _has_hat = read
+        return f"{color} {garment}"
 
     def _top(self, group: str, image_emb: np.ndarray) -> tuple[str, float]:
         labels, emb = self._groups[group]
