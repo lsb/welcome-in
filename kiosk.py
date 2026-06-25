@@ -145,6 +145,15 @@ class Kiosk:
         import tkinter as tk
 
         self.root = tk.Tk()
+        # Tcl picks its "system encoding" from the locale at Tk startup; on some
+        # bundled-Tk builds (uv's Python on the Pi) it lands on iso8859-1 even
+        # under a UTF-8 locale, so _tkinter's UTF-8 bytes get decoded as Latin-1
+        # and non-ASCII labels mojibake ("…" -> "â€¦"). Pin it to UTF-8 so the
+        # screen renders em-dashes/ellipses correctly.
+        try:
+            self.root.tk.call("encoding", "system", "utf-8")
+        except tk.TclError:
+            pass
         self.root.title("welcome-in")
         self.root.configure(bg=_BG)
         if self.fullscreen:

@@ -37,6 +37,26 @@ def format_card(greeting) -> str:
     ])
 
 
+# Typographic Unicode -> ASCII so the printed card can't mojibake regardless of
+# the Pi's locale or which CUPS text filter renders it: a dist-upgrade can reset
+# the locale to non-UTF-8, and a legacy text filter then prints UTF-8 bytes as
+# Latin-1 ("—" comes out as "â€""). The acrostic body is already ASCII by grammar;
+# this also flattens the "— topic —" wrapper and any stray char the raw hello slips in.
+_ASCII_MAP = {
+    "—": "-", "–": "-", "―": "-", "…": "...", "·": "*", "•": "*",
+    "→": "->", "↔": "<->", "±": "+/-",
+    "“": '"', "”": '"', "‘": "'", "’": "'", " ": " ",
+}
+
+
+def _asciify(text: str) -> str:
+    for u, a in _ASCII_MAP.items():
+        text = text.replace(u, a)
+    # Drop anything still non-ASCII so lp's stdin is pure ASCII and no text
+    # filter can misrender it.
+    return text.encode("ascii", "ignore").decode("ascii")
+
+
 class Printer:
     def __init__(self, queue: str | None = None, enabled: bool = True, cpi: int = 12):
         self.queue = queue
@@ -61,7 +81,7 @@ class Printer:
         if self.queue:
             cmd[1:1] = ["-d", self.queue]
         try:
-            subprocess.run(cmd, input=format_card(greeting).encode(), check=True,
+            subprocess.run(cmd, input=_asciify(format_card(greeting)).encode("ascii"), check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         except (OSError, subprocess.CalledProcessError) as e:
             detail = e.stderr.decode().strip() if isinstance(e, subprocess.CalledProcessError) and e.stderr else e
