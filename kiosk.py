@@ -167,10 +167,10 @@ class Kiosk:
             res = self.gate.analyze(str(img))
             det_ms = (time.perf_counter() - t_det) * 1000.0
             t_clip = time.perf_counter()
-            clothing = self.tagger.describe(str(img), res.box)
+            compliment = self.tagger.compliment(str(img), res.box)
             clip_ms = (time.perf_counter() - t_clip) * 1000.0
             t_greet = time.perf_counter()
-            self.greeter.greet(res, clothing)
+            self.greeter.greet(res, compliment)
             greet_ms = (time.perf_counter() - t_greet) * 1000.0
             print(f"[kiosk] warmup {img.name}: detect {det_ms:.0f}ms  "
                   f"clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
@@ -279,23 +279,24 @@ class Kiosk:
 
     def _greet(self, snap: Snapshot) -> None:
         """Run the expensive path for one (group of) visitor(s): read the closest
-        person's clothing, stream both greeting parts to the screen, then print the
-        finished card. Aborts (raising GenerationAborted) if the audience leaves —
-        `gone_for` keeps climbing on the detect thread while we generate here."""
+        person's outfit, show the templated hello and stream the question card to the
+        screen, then print the finished card. Aborts (raising GenerationAborted) if
+        the audience leaves — `gone_for` keeps climbing on the detect thread while we
+        generate here."""
         self._post(("begin",))
         res, frame = snap.res, snap.frame
         t_clip = time.perf_counter()
         try:
-            clothing = self.tagger.describe(frame, res.box)
+            compliment = self.tagger.compliment(frame, res.box)
         except Exception:
-            clothing = None
+            compliment = None
         clip_ms = (time.perf_counter() - t_clip) * 1000.0
-        self._post(("clothing", clothing))
-        self._flush_ui()   # paint the appearance line before the LLM generation starts
+        self._post(("clothing", compliment))
+        self._flush_ui()   # paint the appearance line before the card generation starts
 
         t_greet = time.perf_counter()
         greeting = self.greeter.greet(
-            res, clothing,
+            res, compliment,
             on_delta=lambda part, d: self._post(("delta", part, d)),
             abort=lambda: self._stop.is_set() or self._snap.gone_for >= self.abort_after)
         greet_ms = (time.perf_counter() - t_greet) * 1000.0
