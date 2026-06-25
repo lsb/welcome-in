@@ -26,10 +26,13 @@ _OFF = frozenset({"off", "none", "no"})
 
 
 def format_card(greeting) -> str:
-    """The plain-text card: the spoken hello, the theme, then the questions."""
+    """The plain-text card: the spoken hello, the theme, then the questions.
+
+    Three newlines (two blank lines) set the short spoken hello apart from the
+    theme + question card that follows; single blank lines separate the rest."""
     return "\n".join([
         greeting.hello,
-        "",
+        "", "",
         f"— {greeting.topic} —",
         "",
         greeting.questions,
