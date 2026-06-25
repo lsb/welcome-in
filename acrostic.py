@@ -36,13 +36,13 @@ import os
 import re
 import time
 
-# One paragraph spelling TIATSLOPLEEB (12 lines), 10-100 chars each. These three
+# One paragraph spelling SLOPSLOPSLOPTIATLEEB (20 lines), 10-100 chars each. These three
 # defaults define the acrostic's shape and are all overridable from the
 # environment (see acrostic_from_env) — the shape is the strongest lever on the
 # greeting's register, so being able to tune it without code edits matters: a
 # short secret lets the host say its piece and stop (crisp), a long one forces it
 # to keep talking past its content (padded). See greeting-tone notes in greeter.py.
-DEFAULT_PARAGRAPHS = ("TIATSLOPLEEB",)
+DEFAULT_PARAGRAPHS = ("SLOPSLOPSLOPTIATLEEB",)
 DEFAULT_MIN_LINE = 10
 DEFAULT_MAX_LINE = 100
 
@@ -63,7 +63,7 @@ def acrostic_from_env() -> tuple[tuple[str, ...], int, int]:
 
       WELCOME_ACROSTIC   secret to spell, ASCII letters only; '|' separates
                          paragraphs, e.g. "OPEN" or "HELLO|FRIEND". Other
-                         characters are dropped; empty/unset -> the TIATSLOPLEEB
+                         characters are dropped; empty/unset -> the SLOPSLOPSLOPTIATLEEB
                          default. Set to "off" (or none/no/raw) to drop the grammar
                          mask entirely and get the model's raw, unconstrained slop.
       WELCOME_MIN_LINE   minimum characters per line (default 10).
