@@ -5,7 +5,7 @@ into one GBNF grammar and let llama.cpp mask in C++ over a single generation
 pass. The constraint per line is:
 
   * a forced first letter (the next letter of the secret),
-  * a per-line length (default 60-80 chars; tunable, see acrostic_from_env),
+  * a per-line length (default 10-100 chars; tunable, see acrostic_from_env),
   * a plain-English character whitelist (letters, spaces, and a little
     punctuation; sentences end on a period or a question mark) — this is also the
     project's most reliable tone control, since it makes whole classes of
@@ -36,15 +36,15 @@ import os
 import re
 import time
 
-# One paragraph spelling TIATSLOPLEEB (12 lines), 60-80 chars each. These three
+# One paragraph spelling TIATSLOPLEEB (12 lines), 10-100 chars each. These three
 # defaults define the acrostic's shape and are all overridable from the
 # environment (see acrostic_from_env) — the shape is the strongest lever on the
 # greeting's register, so being able to tune it without code edits matters: a
 # short secret lets the host say its piece and stop (crisp), a long one forces it
 # to keep talking past its content (padded). See greeting-tone notes in greeter.py.
 DEFAULT_PARAGRAPHS = ("TIATSLOPLEEB",)
-DEFAULT_MIN_LINE = 60
-DEFAULT_MAX_LINE = 80
+DEFAULT_MIN_LINE = 10
+DEFAULT_MAX_LINE = 100
 
 # Environment variables that override the above (read once per Greeter).
 ACROSTIC_ENV = "WELCOME_ACROSTIC"     # the secret to spell; '|' splits paragraphs
@@ -66,8 +66,8 @@ def acrostic_from_env() -> tuple[tuple[str, ...], int, int]:
                          characters are dropped; empty/unset -> the TIATSLOPLEEB
                          default. Set to "off" (or none/no/raw) to drop the grammar
                          mask entirely and get the model's raw, unconstrained slop.
-      WELCOME_MIN_LINE   minimum characters per line (default 60).
-      WELCOME_MAX_LINE   maximum characters per line (default 80).
+      WELCOME_MIN_LINE   minimum characters per line (default 10).
+      WELCOME_MAX_LINE   maximum characters per line (default 100).
 
     Returns paragraphs == () when the acrostic is switched off.
 
@@ -104,7 +104,7 @@ _MID_CHARS = r"a-zA-Z ,;:'-"        # body char that does NOT end a sentence (no
 
 
 def build_acrostic_gbnf(paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
-                        min_line: int = 60, max_line: int = 80,
+                        min_line: int = DEFAULT_MIN_LINE, max_line: int = DEFAULT_MAX_LINE,
                         last_min_line: int = 40) -> str:
     """Build a GBNF grammar whose strings are exactly the legal acrostics.
 
@@ -115,10 +115,11 @@ def build_acrostic_gbnf(paragraphs: tuple[str, ...] = DEFAULT_PARAGRAPHS,
     """
     # body chars before the final char. Clamped to 0 <= lo,last_lo <= hi so that
     # out-of-range env tuning (e.g. a tiny max_line) can't emit an invalid GBNF
-    # repetition like bodychar{38,28}.
+    # repetition like bodychar{38,28}. last_lo is also capped at lo, so the closing
+    # line is never forced *longer* than a regular line (it may still be shorter).
     hi = max(0, max_line - 2)
     lo = min(max(0, min_line - 2), hi)
-    last_lo = min(max(0, last_min_line - 2), hi)
+    last_lo = min(max(0, last_min_line - 2), lo)
 
     # Flatten paragraphs into (forced letter, separator-after-this-line).
     plan: list[tuple[str, str | None]] = []

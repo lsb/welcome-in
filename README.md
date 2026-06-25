@@ -81,8 +81,8 @@ WELCOME_ACROSTIC=off uv run python main.py 2.png
 | var | default | meaning |
 |-----|---------|---------|
 | `WELCOME_ACROSTIC` | `TIATSLOPLEEB` | secret to spell; ASCII letters only, `\|` splits paragraphs (`HELLO\|FRIEND`). `off` (or `none`/`no`/`raw`) drops the grammar mask entirely for raw output |
-| `WELCOME_MIN_LINE` | `60` | min characters per line |
-| `WELCOME_MAX_LINE` | `80` | max characters per line |
+| `WELCOME_MIN_LINE` | `10` | min characters per line |
+| `WELCOME_MAX_LINE` | `100` | max characters per line |
 
 The startup banner echoes the active acrostic and line bounds so you can confirm
 the override took.
