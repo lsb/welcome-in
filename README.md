@@ -135,7 +135,7 @@ WELCOME_PRINTER=off uv run python kiosk.py   # run with no printer attached
 |-------|-----|
 | **camera** | USB on both Mac and Pi, via `imageio`'s ffmpeg device reader — no `opencv-python` (no cp314 wheel). `camera.py` |
 | **display** | a Tk full-screen skin that streams the text live; everything routes through a sink seam, so it can be reskinned (web / pygame) without touching the loop. Needs Tk: `apt install python3-tk` on the Pi |
-| **printer** | the finished card prints once, complete, as plain text through CUPS (`lp`), **landscape** at 12 cpi so ~100-char lines don't wrap. `WELCOME_PRINTER=<queue>` picks a printer; `off` disables it. `printer.py` |
+| **printer** | the finished card prints once, complete, as a one-page **PostScript** document through CUPS (`lp`): the hello set in serif italic (wrapped at 80 cols), the question card in fixed-width Courier with each line's first letter **bold** to surface the acrostic, **landscape** so ~100-char lines don't wrap. `WELCOME_PRINTER=<queue>` picks a printer; `off` disables it; `WELCOME_PRINT_CPI` tunes the body density. `printer.py` |
 
 The acrostic / tone env vars (above) apply to the kiosk too.
 
