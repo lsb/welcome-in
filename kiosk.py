@@ -75,7 +75,7 @@ class Kiosk:
     # -- worker: load, then capture/detect/greet loop --------------------
     def _run(self) -> None:
         try:
-            self._post(("status", "warming up the gallery…"))
+            self._post(("status", "warming up the gallery..."))
             from clip_tags import ClipTagger
             from face_gate import FaceGate
             from greeter import Greeter
@@ -173,7 +173,7 @@ class Kiosk:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         wrap = max(400, self.root.winfo_screenwidth() - 240)
-        self.status_var = tk.StringVar(value="warming up the gallery…")
+        self.status_var = tk.StringVar(value="warming up the gallery...")
         self.hello_var = tk.StringVar(value="")
         self.topic_var = tk.StringVar(value="")
         self.card_var = tk.StringVar(value="")
@@ -210,10 +210,10 @@ class Kiosk:
             self.hello_var.set("")
             self.topic_var.set("")
             self.card_var.set("")
-            self.status_var.set("greeting you…")
+            self.status_var.set("greeting you...")
         elif kind == "clothing":
             if msg[1]:
-                self.status_var.set(f"noticing your {msg[1]}…")
+                self.status_var.set(f"noticing your {msg[1]}...")
         elif kind == "delta":
             if msg[1] == "hello":
                 self._hello += msg[2]
@@ -224,9 +224,9 @@ class Kiosk:
         elif kind == "settle":
             _, hello, topic, questions = msg
             self.hello_var.set(hello)
-            self.topic_var.set(f"— {topic} —")
+            self.topic_var.set(f"- {topic} -")
             self.card_var.set(questions)
-            self.status_var.set("your card is printing — take it as you come in"
+            self.status_var.set("your card is printing - take it as you come in"
                                 if self.printer.enabled
                                 else "linger on these as long as you like")
         elif kind == "clear":
