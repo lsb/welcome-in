@@ -108,11 +108,22 @@ class Greeter:
                                              min_line=self.min_line, max_line=self.max_line)
         return self._hello_dec, self._card_dec
 
-    def greet(self, face: FaceResult, clothing: str | None = None) -> Greeting:
+    def greet(self, face: FaceResult, clothing: str | None = None,
+              on_delta=None) -> Greeting:
+        """Generate both parts. If on_delta is given it is called as
+        on_delta(part, piece) for every streamed token — part is "hello" while
+        the spoken hello streams, then "card" while the question card streams —
+        so a live display can render the greeting as the model writes it. Other
+        sinks (the printer) use the finished, settled text in the returned
+        Greeting, not the raw stream."""
         hello_dec, card_dec = self._ensure_decoders()
-        hello = hello_dec.generate(SYSTEM, build_user_prompt(clothing))
+        hello = hello_dec.generate(
+            SYSTEM, build_user_prompt(clothing),
+            on_delta=(lambda d: on_delta("hello", d)) if on_delta else None)
         topic = pick_topic()
-        questions = card_dec.generate(QUESTIONS_SYSTEM, build_questions_prompt(topic))
+        questions = card_dec.generate(
+            QUESTIONS_SYSTEM, build_questions_prompt(topic),
+            on_delta=(lambda d: on_delta("card", d)) if on_delta else None)
         return Greeting(hello=hello, questions=questions, topic=topic)
 
 

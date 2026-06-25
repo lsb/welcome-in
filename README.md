@@ -87,8 +87,30 @@ WELCOME_ACROSTIC=off uv run python main.py 2.png
 The startup banner echoes the active acrostic and line bounds so you can confirm
 the override took.
 
-## Next steps (not yet wired)
+## Kiosk — live camera + printed card
 
-- Live camera frames (picamera2 / a USB cam) feeding `FaceGate.analyze` in a loop.
-- Speak greetings aloud via `deliver()` (`say` on macOS, `espeak-ng`/`piper` on the Pi).
+`kiosk.py` runs the whole thing as a standing installation: a USB webcam feeds
+`FaceGate.analyze` a few times a second, and when a visitor faces the camera the
+greeting **streams onto a full-screen display as the model writes it** (tens of
+seconds on the Pi — the wait is the show), then the finished question card is
+**printed** for the visitor to take.
+
+```bash
+uv sync                                     # picks up imageio (USB capture)
+uv run python kiosk.py                       # full-screen, default camera + printer
+uv run python kiosk.py --windowed --cam 1    # windowed, second camera
+WELCOME_PRINTER=off uv run python kiosk.py   # run with no printer attached
+```
+
+| piece | how |
+|-------|-----|
+| **camera** | USB on both Mac and Pi, via `imageio`'s ffmpeg device reader — no `opencv-python` (no cp314 wheel). `camera.py` |
+| **display** | a Tk full-screen skin that streams the text live; everything routes through a sink seam, so it can be reskinned (web / pygame) without touching the loop. Needs Tk: `apt install python3-tk` on the Pi |
+| **printer** | the finished card prints once, complete, as plain text through CUPS (`lp`), **landscape** at 12 cpi so ~100-char lines don't wrap. `WELCOME_PRINTER=<queue>` picks a printer; `off` disables it. `printer.py` |
+
+The acrostic / tone env vars (above) apply to the kiosk too.
+
+## Still not wired
+
+- Speak greetings aloud (`say` on macOS, `espeak-ng`/`piper` on the Pi).
 - Optional `face_landmark_detector.onnx` (468-pt mesh) for precise head-pose gating.

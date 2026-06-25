@@ -11,4 +11,6 @@ dependencies = [
     "huggingface-hub>=0.30",
     "llama-cpp-python>=0.3.31",
     "tokenizers>=0.23.1",
+    "imageio>=2.37",
+    "imageio-ffmpeg>=0.5",
 ]

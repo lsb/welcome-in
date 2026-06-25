@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image
 
 from anchors import INPUT_SIZE, generate_anchors
+from imaging import to_rgb
 from models import ensure_face_model
 
 # BlazeFace keypoint indices (within each decoded row, after the 4 bbox values).
@@ -124,8 +125,9 @@ class FaceGate:
         return out
 
     # -- public API ------------------------------------------------------
-    def analyze(self, image_path: str | Path) -> FaceResult:
-        img = Image.open(image_path).convert("RGB")
+    def analyze(self, image) -> FaceResult:
+        # `image` is a path, a PIL.Image, or an HWC uint8 ndarray (a live frame).
+        img = to_rgb(image)
         ow, oh = img.size
         canvas, scale, pad_x, pad_y = _letterbox(img)
         raw, scores = self._detect(canvas)

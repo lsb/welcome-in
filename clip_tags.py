@@ -18,6 +18,7 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
+from imaging import to_rgb
 from models import ensure_clip
 
 # CLIP image normalisation (from the model's preprocessor_config.json).
@@ -92,8 +93,8 @@ class ClipTagger:
         return groups
 
     # -- image side ------------------------------------------------------
-    def _embed_image(self, image_path, box) -> np.ndarray:
-        im = Image.open(image_path).convert("RGB")
+    def _embed_image(self, image, box) -> np.ndarray:
+        im = to_rgb(image)   # path, PIL.Image, or live ndarray frame
         if box is not None:
             im = _torso_crop(im, box)
         arr = (np.asarray(_resize_center(im), np.float32) / 255.0 - _MEAN) / _STD
@@ -101,10 +102,10 @@ class ClipTagger:
         emb = self._vis.run(None, {"pixel_values": pixel_values})[0][0]
         return emb / (np.linalg.norm(emb) + 1e-9)
 
-    def describe(self, image_path, box=None) -> str | None:
+    def describe(self, image, box=None) -> str | None:
         """Return a short clothing description like 'a red hoodie, in a casual
         style' (or '… and a hat …'), or None if nothing is read confidently."""
-        ie = self._embed_image(image_path, box)
+        ie = self._embed_image(image, box)
         color, _ = self._top("color", ie)
         garment, gconf = self._top("garment", ie)
         if gconf < _MIN_CONF:

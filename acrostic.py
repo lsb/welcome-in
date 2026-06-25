@@ -211,7 +211,8 @@ class AcrosticDecoder:
             {"role": "user", "content": user},
         ]).prompt
 
-    def generate(self, system: str, user: str, seed: int | None = None) -> str:
+    def generate(self, system: str, user: str, seed: int | None = None,
+                 on_delta=None) -> str:
         prompt_ids = self.llm.tokenize(self._render_prompt(system, user).encode(),
                                        add_bos=True, special=True)
         # Seed with epoch seconds so each run (and each visitor, since a greeting
@@ -219,7 +220,7 @@ class AcrosticDecoder:
         # fixed default each process, so separate runs would repeat. The grammar
         # object itself is reusable across calls. Callers (e.g. the tone harness)
         # may pass an explicit seed to get distinct samples within one second.
-        out = self.llm.create_completion(
+        kw = dict(
             prompt=prompt_ids, max_tokens=self.max_tokens,
             temperature=self.temperature, top_p=self.top_p, top_k=self.top_k,
             seed=int(time.time()) if seed is None else seed,
@@ -228,7 +229,23 @@ class AcrosticDecoder:
             presence_penalty=self.presence_penalty,
             grammar=self.grammar,   # None when the acrostic is switched off
         )
-        text = out["choices"][0]["text"].strip()
+        if on_delta is None:
+            text = self.llm.create_completion(**kw)["choices"][0]["text"]
+        else:
+            # Stream token-by-token so a live display can render the greeting as
+            # the model writes it — on the Pi each part takes tens of seconds, so
+            # the wait *is* the show. The grammar still masks every token; on_delta
+            # sees raw pieces, and _polish_last_line settles the forced last-line
+            # fragment once generation completes (so the screen shows live text,
+            # then snaps to the same finished string the printer/return value use).
+            pieces: list[str] = []
+            for chunk in self.llm.create_completion(stream=True, **kw):
+                piece = chunk["choices"][0]["text"]
+                if piece:
+                    pieces.append(piece)
+                    on_delta(piece)
+            text = "".join(pieces)
+        text = text.strip()
         # _polish_last_line tidies the acrostic's forced final line; with no
         # grammar there's no such structure, so return the raw text untouched.
         return text if self.grammar is None else _polish_last_line(text)
