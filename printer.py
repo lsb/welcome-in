@@ -72,6 +72,8 @@ _HELLO_PT, _HELLO_LEAD = 15.0, 19.0   # Part 1: serif proportional italic
 _HELLO_WRAP = 80                      # columns to wrap the hello at
 _TOPIC_PT, _TOPIC_LEAD = 13.0, 26.0   # the theme, centered italic
 _GAP_AFTER_HELLO = 24.0               # set the hello apart from the card below
+_BYLINE = "by Lee Butterman"          # signature pinned to the lower-left corner
+_BYLINE_PT = 10.0                     # small serif italic, like the screen byline
 
 
 def card_postscript(greeting, cpi: int = 12) -> str:
@@ -128,6 +130,11 @@ def card_postscript(greeting, cpi: int = 12) -> str:
                 f"/Courier-Bold {body_pt:g} selectfont ({_ps_escape(first)}) show "
                 f"/Courier {body_pt:g} selectfont ({_ps_escape(rest)}) show")
         y -= body_lead
+
+    # Signature pinned to the lower-left corner, at a fixed baseline above the
+    # bottom margin so it sits in the same spot regardless of how the card flows.
+    out.append(f"/Times-Italic {_BYLINE_PT:g} selectfont")
+    out.append(f"{_MARGIN:g} {_MARGIN:.1f} moveto ({_ps_escape(_asciify(_BYLINE))}) show")
 
     out.append("showpage")
     return "\n".join(out) + "\n"
