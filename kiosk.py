@@ -29,6 +29,7 @@ import argparse
 import queue
 import threading
 import time
+from pathlib import Path
 
 from camera import Camera
 from printer import Printer
@@ -39,13 +40,16 @@ _BG = "#0a0a0a"
 class Kiosk:
     def __init__(self, model: str = "0.8B", cam_index: int = 0, fullscreen: bool = True,
                  detect_interval: float = 0.1, min_show: float = 8.0,
-                 clear_after: float = 4.0):
+                 clear_after: float = 4.0, warmup: bool = True,
+                 warmup_image: str = "6.png"):
         self.model = model
         self.cam_index = cam_index
         self.fullscreen = fullscreen
         self.detect_interval = detect_interval   # seconds between detections
         self.min_show = min_show                 # hold a card at least this long
         self.clear_after = clear_after           # clear once gone this long
+        self.warmup = warmup                     # full e2e pass on startup
+        self.warmup_image = warmup_image
 
         self._q: queue.Queue = queue.Queue()
         self._stop = threading.Event()
@@ -84,11 +88,41 @@ class Kiosk:
             self.tagger = ClipTagger()
             self.greeter = Greeter(size=self.model).load()
             self.camera = Camera(index=self.cam_index)
+            if self.warmup:
+                self._warmup()
             self._post(("status", "waiting"))
         except Exception as e:  # surface startup failures on screen, don't crash silently
             self._post(("error", f"could not start: {e}"))
             return
         self._loop()
+
+    def _warmup(self) -> None:
+        """Run the whole pipeline once on a sample image before going live, so the
+        first real visitor doesn't pay first-call overhead — the lazy chat
+        formatter, llama.cpp's decode warmup, and the CLIP / face-gate paths. The
+        model is already loaded; this exercises the actual decode end to end, and
+        seeds the admin timing readout with its numbers."""
+        img = Path(self.warmup_image)
+        if not img.is_absolute():
+            img = Path(__file__).resolve().parent / img   # robust to a service cwd
+        self._post(("status", f"warming up the gallery (running {img.name})..."))
+        try:
+            t_det = time.perf_counter()
+            res = self.gate.analyze(str(img))
+            det_ms = (time.perf_counter() - t_det) * 1000.0
+            t_clip = time.perf_counter()
+            clothing = self.tagger.describe(str(img), res.box)
+            clip_ms = (time.perf_counter() - t_clip) * 1000.0
+            t_greet = time.perf_counter()
+            self.greeter.greet(res, clothing)
+            greet_ms = (time.perf_counter() - t_greet) * 1000.0
+            print(f"[kiosk] warmup {img.name}: detect {det_ms:.0f}ms  "
+                  f"clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
+            self._post(("timing", det_ms, clip_ms, greet_ms))
+        except FileNotFoundError:
+            print(f"[kiosk] warmup image {img} not found; skipping warmup")
+        except Exception as e:
+            print(f"[kiosk] warmup failed: {e}")
 
     def _loop(self) -> None:
         state = "IDLE"
@@ -113,9 +147,8 @@ class Kiosk:
             if state == "IDLE":
                 self._post(("status", "someone's here" if present else "waiting"))
                 if facing:
-                    print(f"[kiosk] detect {det_ms:.0f}ms  (frame -> facing)")
                     state = "GREETING"
-                    self._greet(frame, res)        # blocks here, streaming to the UI
+                    self._greet(frame, res, det_ms)   # blocks here, streaming to the UI
                     show_since = time.monotonic()
                     state = "SHOWING"
             elif state == "SHOWING":
@@ -125,7 +158,7 @@ class Kiosk:
 
             time.sleep(self.detect_interval)
 
-    def _greet(self, frame, res) -> None:
+    def _greet(self, frame, res, det_ms: float = 0.0) -> None:
         """Run the expensive path for one visitor: read clothing, stream both
         greeting parts to the screen, then print the finished card."""
         self._post(("begin",))
@@ -141,7 +174,8 @@ class Kiosk:
         greeting = self.greeter.greet(
             res, clothing, on_delta=lambda part, d: self._post(("delta", part, d)))
         greet_ms = (time.perf_counter() - t_greet) * 1000.0
-        print(f"[kiosk] clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
+        print(f"[kiosk] detect {det_ms:.0f}ms  clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
+        self._post(("timing", det_ms, clip_ms, greet_ms))
 
         # Snap the screen to the finished, settled text (the streamed text was raw;
         # the printer and this 'settle' both use greeter's polished strings).
@@ -185,6 +219,7 @@ class Kiosk:
         self.hello_var = tk.StringVar(value="")
         self.topic_var = tk.StringVar(value="")
         self.card_var = tk.StringVar(value="")
+        self.timing_var = tk.StringVar(value="")
 
         tk.Label(self.root, textvariable=self.status_var, bg=_BG, fg="#555",
                  font=("Helvetica", 16)).pack(pady=(48, 0))
@@ -201,6 +236,12 @@ class Kiosk:
                  font=("Courier", 20), wraplength=wrap, justify="left",
                  anchor="w").pack(pady=(16, 0), padx=120, anchor="w", fill="x")
 
+        # Discreet admin timing readout pinned to the lower-right in near-black
+        # grey: invisible across the room, legible up close if you know to look.
+        tk.Label(self.root, textvariable=self.timing_var, bg=_BG, fg="#2a2a2a",
+                 font=("Courier", 11)).place(relx=1.0, rely=1.0, x=-10, y=-6,
+                                             anchor="se")
+
     def _drain(self) -> None:
         try:
             while True:
@@ -216,6 +257,10 @@ class Kiosk:
             self.status_var.set(msg[1])
         elif kind == "error":
             self.status_var.set(msg[1])
+        elif kind == "timing":
+            _, det, clip, greet = msg
+            self.timing_var.set(
+                f"detect {det:.0f}ms  clip {clip:.0f}ms  greet {greet / 1000:.1f}s")
         elif kind == "begin":
             self._hello = self._card = ""
             self.hello_var.set("")
@@ -262,8 +307,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--cam", type=int, default=0, help="USB camera index (default: 0)")
     p.add_argument("--windowed", action="store_true",
                    help="run in a window instead of full-screen")
+    p.add_argument("--no-warmup", dest="warmup", action="store_false",
+                   help="skip the startup end-to-end warmup pass")
+    p.add_argument("--warmup-image", default="6.png",
+                   help="image for the startup warmup pass (default: 6.png)")
     args = p.parse_args(argv)
-    Kiosk(model=args.model, cam_index=args.cam, fullscreen=not args.windowed).run()
+    Kiosk(model=args.model, cam_index=args.cam, fullscreen=not args.windowed,
+          warmup=args.warmup, warmup_image=args.warmup_image).run()
     return 0
 
 
