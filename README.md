@@ -90,15 +90,37 @@ the override took.
 ## Kiosk — live camera + printed card
 
 `kiosk.py` runs the whole thing as a standing installation: a USB webcam feeds
-`FaceGate.analyze` a few times a second, and when a visitor faces the camera the
-greeting **streams onto a full-screen display as the model writes it** (tens of
-seconds on the Pi — the wait is the show), then the finished question card is
-**printed** for the visitor to take.
+`FaceGate.analyze` a few times a second on its **own capture/detect thread**, and
+when a visitor **stops and holds the camera's gaze**, the greeting **streams onto
+a full-screen display as the model writes it** (tens of seconds on the Pi — the
+wait is the show), then the finished question card is **printed** for them to take.
+
+Wake-word behaviour (all keyed on *facing the camera*, never on mere presence, so
+a flowing exhibit where someone is always in frame still re-arms):
+
+- **Stopper, not passer-by** — a near face must stay frontal for `--dwell` seconds
+  (1.2 default) before the greeting fires, so people walking past don't trip it.
+- **Plural for groups** — every facing face is counted; two or more and the hello
+  is addressed to the group ("hi everyone"), complimenting the **closest** person's
+  outfit (the one we read with CLIP).
+- **Abort on departure** — the detect thread keeps watching *during* the long
+  generation (both llama.cpp and onnxruntime release the GIL), so if nobody faces
+  the camera for `--abort-after` seconds (1.5 default) the half-written greeting is
+  dropped, nothing prints, and the door re-arms.
+- **Proximity floor** — a face must be at least `--near-prox` box-height (0.10) to
+  count as a near visitor; at a doorway this is the stopper gate and keeps far wall
+  art out of the trigger with no painting-specific logic.
+
+A discreet near-black debug readout in the lower-right exposes every variable that
+drives the gate — face counts, the closest face's pose/proximity, the dwell
+countdown to fire and the gone countdown to abort/re-arm, stage timings, and the
+active acrostic/model — invisible across the room, legible up close for tuning.
 
 ```bash
 uv sync                                     # picks up imageio (USB capture)
 uv run python kiosk.py                       # full-screen, default camera + printer
 uv run python kiosk.py --windowed --cam 1    # windowed, second camera
+uv run python kiosk.py --dwell 0.8 --near-prox 0.18   # twitchier trigger, closer-only
 WELCOME_PRINTER=off uv run python kiosk.py   # run with no printer attached
 ```
 

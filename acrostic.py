@@ -36,6 +36,13 @@ import os
 import re
 import time
 
+
+class GenerationAborted(Exception):
+    """Raised out of ``generate()`` when the caller's ``abort()`` fires mid-stream.
+    The kiosk hooks ``abort`` to "nobody has faced the camera for ~1.5 s" so a
+    greeting whose audience walked away stops decoding at once instead of talking
+    to an empty doorway for the rest of its tens-of-seconds run."""
+
 # One paragraph spelling SLOPLEEB (8 lines), 10-100 chars each. These three
 # defaults define the acrostic's shape and are all overridable from the
 # environment (see acrostic_from_env) — the shape is the strongest lever on the
@@ -213,7 +220,11 @@ class AcrosticDecoder:
         ]).prompt
 
     def generate(self, system: str, user: str, seed: int | None = None,
-                 on_delta=None) -> str:
+                 on_delta=None, abort=None) -> str:
+        """Generate one greeting. ``abort`` (an optional zero-arg predicate) is
+        polled once per streamed token; the moment it returns truthy, decoding is
+        torn down and ``GenerationAborted`` is raised. Only honoured on the
+        streaming path (``on_delta`` set), which is the live kiosk's path."""
         prompt_ids = self.llm.tokenize(self._render_prompt(system, user).encode(),
                                        add_bos=True, special=True)
         # Seed with epoch seconds so each run (and each visitor, since a greeting
@@ -240,11 +251,20 @@ class AcrosticDecoder:
             # fragment once generation completes (so the screen shows live text,
             # then snaps to the same finished string the printer/return value use).
             pieces: list[str] = []
-            for chunk in self.llm.create_completion(stream=True, **kw):
-                piece = chunk["choices"][0]["text"]
-                if piece:
-                    pieces.append(piece)
-                    on_delta(piece)
+            stream = self.llm.create_completion(stream=True, **kw)
+            try:
+                for chunk in stream:
+                    # Poll the caller's abort before touching the token, so a
+                    # departed visitor stops the run promptly. close() then sends
+                    # GeneratorExit into llama.cpp's generator to free the decode.
+                    if abort is not None and abort():
+                        raise GenerationAborted()
+                    piece = chunk["choices"][0]["text"]
+                    if piece:
+                        pieces.append(piece)
+                        on_delta(piece)
+            finally:
+                stream.close()
             text = "".join(pieces)
         text = text.strip()
         # _polish_last_line tidies the acrostic's forced final line; with no

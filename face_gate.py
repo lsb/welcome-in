@@ -40,6 +40,13 @@ class FaceResult:
     keypoints: np.ndarray | None = None                   # (6, 2) original-image normalized
     description: str = ""
     metrics: dict = field(default_factory=dict)           # debug: yaw / ear_ratio / roll
+    # Whole-room counts: the kiosk greets a group in the plural and reads the
+    # closest person's outfit, so it needs more than the single best face. The
+    # primary face above (box/keypoints/conf/metrics) is the closest *facing*
+    # person when anyone faces, else the closest present person.
+    present_count: int = 0          # faces detected over threshold (after NMS)
+    facing_count: int = 0           # of those, how many pass the frontal-pose test
+    proximity: float = 0.0          # primary face's box height (0..1), a distance proxy
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -139,32 +146,49 @@ class FaceGate:
         decoded = self._decode(raw)[mask]
         sc = scores[mask]
         keep = _iou_nms(decoded[:, :4], sc, NMS_IOU)
-        best = keep[int(np.argmax(sc[keep]))]
-        det, score = decoded[best], float(sc[best])
 
-        # Facing test in canvas space (uniform scale+translation -> invariant).
-        kp_canvas = det[4:].reshape(6, 2)
-        facing, conf, metrics = self._facing(kp_canvas)
-
-        # Map box + keypoints back to original-image normalized coords for context.
+        # Map canvas-normalized points back to original-image normalized coords.
         def to_orig(pts: np.ndarray) -> np.ndarray:
             px = (pts[..., 0] * INPUT_SIZE - pad_x) / scale / ow
             py = (pts[..., 1] * INPUT_SIZE - pad_y) / scale / oh
             return np.stack([px, py], axis=-1)
 
-        box_pts = to_orig(det[:4].reshape(2, 2)).reshape(-1)
-        kp_orig = to_orig(kp_canvas)
-        box = (float(box_pts[0]), float(box_pts[1]), float(box_pts[2]), float(box_pts[3]))
+        # Evaluate *every* kept face, not just the highest-scoring one: the kiosk
+        # greets a group in the plural and reads the closest person's outfit, so it
+        # needs the whole room — how many are present, how many face the camera, and
+        # which facing face is nearest (larger box = closer) to anchor the greeting.
+        faces = []
+        for i in keep:
+            det = decoded[i]
+            kp_canvas = det[4:].reshape(6, 2)               # facing test in canvas space
+            ok, conf, metrics = self._facing(kp_canvas)     #   (scale/translate-invariant)
+            box_pts = to_orig(det[:4].reshape(2, 2)).reshape(-1)
+            box = (float(box_pts[0]), float(box_pts[1]),
+                   float(box_pts[2]), float(box_pts[3]))
+            faces.append({"facing": ok, "conf": conf, "metrics": metrics,
+                          "score": float(sc[i]), "box": box,
+                          "kp": to_orig(kp_canvas), "bh": abs(box[3] - box[1])})
+
+        present_count = len(faces)
+        facing = [f for f in faces if f["facing"]]
+        facing_count = len(facing)
+        # Primary = the face the greeting is *about*: the closest facing person if
+        # anyone faces (largest box height = nearest the camera), else the closest
+        # present face so position/proximity context still resolves.
+        primary = max(facing or faces, key=lambda f: f["bh"])
 
         return FaceResult(
             person_present=True,
-            facing_camera=facing,
-            facing_conf=conf,
-            score=score,
-            box=box,
-            keypoints=kp_orig,
-            description=self._describe(box),
-            metrics=metrics,
+            facing_camera=facing_count > 0,
+            facing_conf=primary["conf"],
+            score=primary["score"],
+            box=primary["box"],
+            keypoints=primary["kp"],
+            description=self._describe(primary["box"]),
+            metrics=primary["metrics"],
+            present_count=present_count,
+            facing_count=facing_count,
+            proximity=primary["bh"],
         )
 
     def _facing(self, kp: np.ndarray):

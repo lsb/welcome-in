@@ -109,28 +109,49 @@ class Greeter:
         return self._hello_dec, self._card_dec
 
     def greet(self, face: FaceResult, clothing: str | None = None,
-              on_delta=None) -> Greeting:
+              on_delta=None, abort=None) -> Greeting:
         """Generate both parts. If on_delta is given it is called as
         on_delta(part, piece) for every streamed token — part is "hello" while
         the spoken hello streams, then "card" while the question card streams —
         so a live display can render the greeting as the model writes it. Other
         sinks (the printer) use the finished, settled text in the returned
-        Greeting, not the raw stream."""
+        Greeting, not the raw stream.
+
+        ``abort`` is forwarded to both streamed parts (see AcrosticDecoder.generate):
+        when a group's worth of visitors all leave mid-greeting it raises
+        GenerationAborted, which the kiosk catches to drop the half-written card.
+
+        How many faces are turned to the camera (``face.facing_count``) decides
+        whether the hello is addressed to one visitor or to the group in the plural."""
         hello_dec, card_dec = self._ensure_decoders()
+        group_size = max(1, getattr(face, "facing_count", 1) or 1)
         hello = hello_dec.generate(
-            SYSTEM, build_user_prompt(clothing),
-            on_delta=(lambda d: on_delta("hello", d)) if on_delta else None)
+            SYSTEM, build_user_prompt(clothing, group_size),
+            on_delta=(lambda d: on_delta("hello", d)) if on_delta else None, abort=abort)
         topic = pick_topic()
         questions = card_dec.generate(
             QUESTIONS_SYSTEM, build_questions_prompt(topic),
-            on_delta=(lambda d: on_delta("card", d)) if on_delta else None)
+            on_delta=(lambda d: on_delta("card", d)) if on_delta else None, abort=abort)
         return Greeting(hello=hello, questions=questions, topic=topic)
 
 
-def build_user_prompt(clothing: str | None) -> str:
+def build_user_prompt(clothing: str | None, group_size: int = 1) -> str:
     """The per-visitor user turn — deliberately minimal so the system prompt's short,
     casual register carries the greeting. Kept module-level so the tone harness and
-    the live greeter build the exact same prompt (no drift between test and ship)."""
+    the live greeter build the exact same prompt (no drift between test and ship).
+
+    For a group (group_size >= 2) the turn names the headcount and asks for a single
+    plural hello to everyone, with the one outfit we read (the closest visitor's)
+    used as the compliment — so 'love the jacket' lands on a person, not the crowd."""
+    if group_size >= 2:
+        if clothing:
+            return (f"A group of {group_size} visitors just walked in together. "
+                    f"The one nearest you is wearing {clothing}. Greet them all at once: "
+                    f"one quick hi to the group, then one compliment on that outfit. "
+                    f"Speak to the whole group, not one person.")
+        return (f"A group of {group_size} visitors just walked in together. "
+                f"Greet them all at once with one quick hi to the group. "
+                f"Speak to the whole group, not one person.")
     if clothing:
         return f"A visitor just walked in, wearing {clothing}. Greet them."
     return "A visitor just walked in. Greet them."

@@ -29,25 +29,55 @@ import argparse
 import queue
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
+from acrostic import GenerationAborted
 from camera import Camera
 from printer import Printer
 
 _BG = "#0a0a0a"
 
 
+@dataclass(frozen=True)
+class Snapshot:
+    """One reading from the capture/detect thread, published as a single atomic
+    reference (Python assignment is atomic under the GIL) that the control loop and
+    the abort hook read without locking.
+
+    ``is_facing`` is whether at least one *near* face (box height >= near_prox) is
+    turned to the camera; ``facing_for`` is how long that has held continuously
+    (the dwell gate that separates a stopper from a passer-by); ``gone_for`` is how
+    long since a near face last faced — it drives both the mid-greeting abort and
+    the SHOWING -> IDLE re-arm. Both timers are kept by the detect thread, which is
+    the only thing sampling the camera continuously."""
+    t: float = 0.0
+    res: object = None           # the FaceResult (handed to the greet that follows)
+    frame: object = None         # the RGB frame (for the closest-person outfit read)
+    present: int = 0             # faces detected over threshold
+    facing: int = 0              # of those, how many face the camera
+    is_facing: bool = False      # a near face is facing (drives dwell/abort/re-arm)
+    proximity: float = 0.0       # closest facing face's box height (0..1)
+    facing_for: float = 0.0      # seconds the near-facing streak has held (dwell)
+    gone_for: float = 1e9        # seconds since a near face last faced
+    det_ms: float = 0.0
+
+
 class Kiosk:
     def __init__(self, model: str = "0.8B", cam_index: int = 0, fullscreen: bool = True,
-                 detect_interval: float = 0.1, min_show: float = 8.0,
-                 clear_after: float = 4.0, warmup: bool = True,
+                 detect_interval: float = 0.1, dwell: float = 1.2, min_show: float = 8.0,
+                 abort_after: float = 1.5, clear_after: float = 4.0,
+                 near_prox: float = 0.10, warmup: bool = True,
                  warmup_image: str = "6.png"):
         self.model = model
         self.cam_index = cam_index
         self.fullscreen = fullscreen
         self.detect_interval = detect_interval   # seconds between detections
+        self.dwell = dwell                       # must keep facing this long to fire
         self.min_show = min_show                 # hold a card at least this long
-        self.clear_after = clear_after           # clear once gone this long
+        self.abort_after = abort_after           # stop a greeting once gone this long
+        self.clear_after = clear_after           # re-arm once gone this long
+        self.near_prox = near_prox               # min face box height to count as near
         self.warmup = warmup                     # full e2e pass on startup
         self.warmup_image = warmup_image
 
@@ -56,6 +86,11 @@ class Kiosk:
         self._painted = threading.Event()   # UI-thread handshake (see _flush_ui)
         self._closing = False
         self._thread: threading.Thread | None = None
+        self._detect_thread: threading.Thread | None = None
+
+        # The capture/detect thread publishes the latest reading here; the control
+        # loop and the abort hook read it lock-free (atomic reference assignment).
+        self._snap = Snapshot()
 
         # Heavy components are built on the worker thread (see _run), so the UI
         # stays responsive while models load.
@@ -65,6 +100,8 @@ class Kiosk:
         # Live accumulators for the two streamed parts (touched on the UI thread).
         self._hello = ""
         self._card = ""
+        # Latest values behind the discreet debug readout (UI thread only).
+        self._dbg: dict = {}
 
     # -- lifecycle -------------------------------------------------------
     def run(self) -> None:
@@ -86,7 +123,7 @@ class Kiosk:
         self._post(("flush",))
         self._painted.wait(timeout)
 
-    # -- worker: load, then capture/detect/greet loop --------------------
+    # -- worker: load, then run capture/detect + control loops -----------
     def _run(self) -> None:
         try:
             self._post(("status", "warming up the gallery..."))
@@ -98,13 +135,21 @@ class Kiosk:
             self.tagger = ClipTagger()
             self.greeter = Greeter(size=self.model).load()
             self.camera = Camera(index=self.cam_index)
+            self._post(("config", " ".join(self.greeter.paragraphs) or "off",
+                        f"{self.greeter.min_line}-{self.greeter.max_line}", self.model))
             if self.warmup:
                 self._warmup()
             self._post(("status", "waiting"))
         except Exception as e:  # surface startup failures on screen, don't crash silently
             self._post(("error", f"could not start: {e}"))
             return
-        self._loop()
+        # Capture/detect runs continuously on its own thread so the camera keeps
+        # watching *during* the long generation — that is what lets a greeting
+        # abort the instant its audience leaves. The control loop below only reads
+        # the snapshots it publishes; it never touches the camera itself.
+        self._detect_thread = threading.Thread(target=self._detect_loop, daemon=True)
+        self._detect_thread.start()
+        self._control_loop()
 
     def _warmup(self) -> None:
         """Run the whole pipeline once on a sample image before going live, so the
@@ -134,10 +179,18 @@ class Kiosk:
         except Exception as e:
             print(f"[kiosk] warmup failed: {e}")
 
-    def _loop(self) -> None:
-        state = "IDLE"
-        last_present = 0.0
-        show_since = 0.0
+    def _detect_loop(self) -> None:
+        """Capture + detect, forever, on its own thread. Publishes a Snapshot per
+        frame (including the dwell/abort timers it alone can keep) and feeds the
+        live debug readout. Runs *through* the greeting too — both llama.cpp and
+        onnxruntime release the GIL during compute, so this thread keeps sampling
+        in the gaps and the abort hook stays live."""
+        facing_since = 0.0
+        last_facing = 0.0
+        # A few frames of grace so brief detection flicker (a blink, proximity
+        # oscillating at the floor) doesn't shatter the dwell streak or trip the
+        # abort — this is the "tolerate a few consecutive misses" hysteresis.
+        grace = max(0.3, 3 * self.detect_interval)
         while not self._stop.is_set():
             try:
                 frame = self.camera.frame()
@@ -149,29 +202,74 @@ class Kiosk:
             res = self.gate.analyze(frame)
             det_ms = (time.perf_counter() - t_det) * 1000.0
             now = time.monotonic()
-            present = res.person_present
-            facing = present and res.facing_camera
-            if present:
-                last_present = now
-
-            if state == "IDLE":
-                self._post(("status", "someone's here" if present else "waiting"))
-                if facing:
-                    state = "GREETING"
-                    self._greet(frame, res, det_ms)   # blocks here, streaming to the UI
-                    show_since = time.monotonic()
-                    state = "SHOWING"
-            elif state == "SHOWING":
-                if (now - show_since) > self.min_show and (now - last_present) > self.clear_after:
-                    self._post(("clear",))
-                    state = "IDLE"
-
+            # "Engaged" = a face that is both facing AND near enough (box height).
+            # The proximity floor is the stopper/passer-by gate; at a doorway it
+            # also keeps far wall art out of the trigger without any special-casing.
+            near_facing = res.facing_camera and res.proximity >= self.near_prox
+            if near_facing:
+                if (now - last_facing) > grace:   # a genuine gap -> fresh streak
+                    facing_since = now
+                last_facing = now
+            gone_for = (now - last_facing) if last_facing else 1e9
+            engaged = gone_for <= grace            # facing now, or within the grace
+            self._snap = Snapshot(
+                t=now, res=res, frame=frame,
+                present=res.present_count, facing=res.facing_count,
+                is_facing=engaged, proximity=res.proximity,
+                facing_for=(now - facing_since) if engaged else 0.0,
+                gone_for=gone_for, det_ms=det_ms)
+            self._post(("vars", self._snap))
             time.sleep(self.detect_interval)
 
-    def _greet(self, frame, res, det_ms: float = 0.0) -> None:
-        """Run the expensive path for one visitor: read clothing, stream both
-        greeting parts to the screen, then print the finished card."""
+    def _control_loop(self) -> None:
+        """The state machine, driven entirely off published snapshots (it never
+        reads the camera). IDLE -> (a near visitor faces for `dwell`) GREETING ->
+        SHOWING -> (audience moves on, or a fresh one is waiting, past `min_show`)
+        IDLE. Keyed on *facing*, never on mere presence: in a flowing exhibit
+        someone is always in frame, so a presence latch would never re-arm."""
+        state, show_since, last_status = "IDLE", 0.0, None
+        self._post(("state", state))
+        while not self._stop.is_set():
+            snap = self._snap
+            now = time.monotonic()
+            if state == "IDLE":
+                status = "someone's here" if snap.present else "waiting"
+                if status != last_status:
+                    self._post(("status", status))
+                    last_status = status
+                # Fire only on a *sustained* near-frontal gaze — the visitor who
+                # stops and holds it, not the one who glances past.
+                if snap.is_facing and snap.facing_for >= self.dwell:
+                    state = "GREETING"
+                    self._post(("state", state))
+                    try:
+                        self._greet(snap)            # blocks, streaming + abortable
+                        show_since = time.monotonic()
+                        state = "SHOWING"
+                    except GenerationAborted:
+                        self._post(("aborted",))     # audience left mid-greeting
+                        state = "IDLE"
+                        last_status = None
+                    self._post(("state", state))
+            elif state == "SHOWING":
+                # Finish-then-re-arm: hold the printed card at least min_show, then
+                # clear once the greeted audience has moved on (gone_for) OR a fresh
+                # audience is already waiting (is_facing), so the next group is served.
+                if (now - show_since) > self.min_show and (
+                        snap.is_facing or snap.gone_for > self.clear_after):
+                    self._post(("clear",))
+                    state = "IDLE"
+                    last_status = None
+                    self._post(("state", state))
+            time.sleep(self.detect_interval)
+
+    def _greet(self, snap: Snapshot) -> None:
+        """Run the expensive path for one (group of) visitor(s): read the closest
+        person's clothing, stream both greeting parts to the screen, then print the
+        finished card. Aborts (raising GenerationAborted) if the audience leaves —
+        `gone_for` keeps climbing on the detect thread while we generate here."""
         self._post(("begin",))
+        res, frame = snap.res, snap.frame
         t_clip = time.perf_counter()
         try:
             clothing = self.tagger.describe(frame, res.box)
@@ -183,10 +281,12 @@ class Kiosk:
 
         t_greet = time.perf_counter()
         greeting = self.greeter.greet(
-            res, clothing, on_delta=lambda part, d: self._post(("delta", part, d)))
+            res, clothing,
+            on_delta=lambda part, d: self._post(("delta", part, d)),
+            abort=lambda: self._stop.is_set() or self._snap.gone_for >= self.abort_after)
         greet_ms = (time.perf_counter() - t_greet) * 1000.0
-        print(f"[kiosk] detect {det_ms:.0f}ms  clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
-        self._post(("timing", det_ms, clip_ms, greet_ms))
+        print(f"[kiosk] detect {snap.det_ms:.0f}ms  clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
+        self._post(("timing", snap.det_ms, clip_ms, greet_ms))
 
         # Snap the screen to the finished, settled text (the streamed text was raw;
         # the printer and this 'settle' both use greeter's polished strings).
@@ -230,7 +330,7 @@ class Kiosk:
         self.hello_var = tk.StringVar(value="")
         self.topic_var = tk.StringVar(value="")
         self.card_var = tk.StringVar(value="")
-        self.timing_var = tk.StringVar(value="")
+        self.debug_var = tk.StringVar(value="")
 
         tk.Label(self.root, textvariable=self.status_var, bg=_BG, fg="#555",
                  font=("Helvetica", 16)).pack(pady=(48, 0))
@@ -247,11 +347,14 @@ class Kiosk:
                  font=("Courier", 20), wraplength=wrap, justify="left",
                  anchor="w").pack(pady=(16, 0), padx=120, anchor="w", fill="x")
 
-        # Discreet admin timing readout pinned to the lower-right in near-black
-        # grey: invisible across the room, legible up close if you know to look.
-        tk.Label(self.root, textvariable=self.timing_var, bg=_BG, fg="#2a2a2a",
-                 font=("Courier", 11)).place(relx=1.0, rely=1.0, x=-10, y=-6,
-                                             anchor="se")
+        # Discreet admin debug readout pinned to the lower-right in near-black grey:
+        # invisible across the room, legible up close if you know to look. Every
+        # variable that drives the gate lives here — counts, the closest face's
+        # pose/proximity, the dwell and abort/clear countdowns, stage timings, and
+        # the active acrostic/model — so the install can be tuned in place.
+        tk.Label(self.root, textvariable=self.debug_var, bg=_BG, fg="#2a2a2a",
+                 font=("Courier", 11), justify="left").place(
+                     relx=1.0, rely=1.0, x=-10, y=-6, anchor="se")
 
     def _drain(self) -> None:
         try:
@@ -268,10 +371,27 @@ class Kiosk:
             self.status_var.set(msg[1])
         elif kind == "error":
             self.status_var.set(msg[1])
+        elif kind == "vars":
+            snap = msg[1]
+            res = snap.res
+            self._dbg.update(
+                present=snap.present, facing=snap.facing, proximity=snap.proximity,
+                facing_for=snap.facing_for, gone_for=snap.gone_for, det_ms=snap.det_ms,
+                desc=(res.description if res and res.person_present else "-"),
+                conf=(res.facing_conf if res else 0.0),
+                metrics=(res.metrics if res else None))
+            self._render_debug()
+        elif kind == "state":
+            self._dbg["fsm"] = msg[1]
+            self._render_debug()
+        elif kind == "config":
+            _, acrostic, lines, model = msg
+            self._dbg.update(acrostic=acrostic, lines=lines, model=model)
+            self._render_debug()
         elif kind == "timing":
-            _, det, clip, greet = msg
-            self.timing_var.set(
-                f"detect {det:.0f}ms  clip {clip:.0f}ms  greet {greet / 1000:.1f}s")
+            _, _det, clip, greet = msg   # det comes live from "vars"; keep the latest
+            self._dbg.update(clip_ms=clip, greet_s=greet / 1000.0)
+            self._render_debug()
         elif kind == "flush":
             self.root.update_idletasks()   # force pending label repaints to land now
             self._painted.set()
@@ -305,6 +425,37 @@ class Kiosk:
             self.topic_var.set("")
             self.card_var.set("")
             self.status_var.set("waiting")
+        elif kind == "aborted":
+            # The audience walked off mid-greeting: drop the half-written card,
+            # print nothing, and quietly re-arm for the next visitor.
+            self._hello = self._card = ""
+            self.hello_var.set("")
+            self.topic_var.set("")
+            self.card_var.set("")
+            self.status_var.set("waiting")
+
+    def _render_debug(self) -> None:
+        """Paint the discreet lower-right readout from the latest variables. Every
+        line maps to a lever in the loop: face counts, the primary face's
+        pose/proximity, the dwell countdown to fire, the gone countdown to
+        abort/re-arm, stage timings, and the active acrostic/model."""
+        d = self._dbg
+        m = d.get("metrics") or {}
+        pose = (f"yaw {m.get('yaw', 0.0):+.2f}  ear {m.get('ear_ratio', 0.0):.2f}  "
+                f"roll {m.get('roll', 0.0):+.0f}") if m else "-"
+        gone = d.get("gone_for", 0.0)
+        gone = 999.0 if gone > 999 else gone
+        self.debug_var.set("\n".join([
+            f"state {d.get('fsm', '?'):8s}  faces {d.get('facing', 0)}/{d.get('present', 0)} facing/present",
+            f"near  {d.get('desc', '-')}   conf {d.get('conf', 0.0):.2f}   "
+            f"prox {d.get('proximity', 0.0):.2f} (>{self.near_prox:.2f})",
+            f"pose  {pose}",
+            f"dwell {d.get('facing_for', 0.0):4.1f}s (>{self.dwell:.1f} fires)   "
+            f"gone {gone:4.1f}s (>{self.abort_after:.1f} abort  >{self.clear_after:.1f} clear)",
+            f"time  det {d.get('det_ms', 0.0):3.0f}ms  clip {d.get('clip_ms', 0.0):4.0f}ms  "
+            f"greet {d.get('greet_s', 0.0):.1f}s",
+            f"acr   {d.get('acrostic', '?')} {d.get('lines', '')}   model {d.get('model', '?')}",
+        ]))
 
     def _on_close(self) -> None:
         self._closing = True
@@ -321,12 +472,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--cam", type=int, default=0, help="USB camera index (default: 0)")
     p.add_argument("--windowed", action="store_true",
                    help="run in a window instead of full-screen")
+    p.add_argument("--dwell", type=float, default=1.2,
+                   help="seconds a near visitor must keep facing before greeting (default 1.2)")
+    p.add_argument("--abort-after", type=float, default=1.5,
+                   help="abort a greeting once nobody has faced for this long (default 1.5)")
+    p.add_argument("--near-prox", type=float, default=0.10,
+                   help="min face box height (0..1) to count as a near visitor (default 0.10)")
     p.add_argument("--no-warmup", dest="warmup", action="store_false",
                    help="skip the startup end-to-end warmup pass")
     p.add_argument("--warmup-image", default="6.png",
                    help="image for the startup warmup pass (default: 6.png)")
     args = p.parse_args(argv)
     Kiosk(model=args.model, cam_index=args.cam, fullscreen=not args.windowed,
+          dwell=args.dwell, abort_after=args.abort_after, near_prox=args.near_prox,
           warmup=args.warmup, warmup_image=args.warmup_image).run()
     return 0
 
