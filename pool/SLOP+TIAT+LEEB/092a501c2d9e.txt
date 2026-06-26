@@ -1,0 +1,18 @@
+# topic: What is the role of authorship, attribution, and remix culture in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should the person who typed the prompt get credit, or is it just a fancy search engine?
+Like when you copy-paste lyrics into a songbook, does typing words make them yours?
+Or are we all just remixing what came before anyway?
+Pay for your own creation.
+
+The prompt asks for a question card text based on the theme: authorship, attribution, and remix in G
+i content. The tone should be plain, direct, rooted in everyday experience, open-ended to provoke  r
+and taking sides. No preamble or answers allowed. I need to write short questions that make visitors
+think about who owns an AI-generated text or image when the input is just a prompt from a human and?
+
+Let's talk about the prompter. Is typing a sentence enough to call you an author?
+Every AI image is built on millions of stolen artworks. Does that make every new piece theft, or a t
+echnological remix?
+Be honest: if your friend made this with ChatGPT in ten seconds, does it feel less valuable than if.

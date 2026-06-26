@@ -1,0 +1,18 @@
+# topic: What is the role of trust, credibility, and post-truth aesthetics in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you believe a story because it sounds true, or only if someone can prove who wrote it?
+Let the machine write your apology letter. Does that make the regret feel real to them receiving it?
+Or does knowing an AI polished your words make every compliment sound like code?
+Pay for truth when fiction looks just as good and costs nothing at all?
+
+The text sounds so human. Why do you believe it?
+If the answer is wrong but confident, does that make it more or less trustworthy than a hesitant lie
+a person tells you?
+Trust your gut feeling about this output, or trust the algorithm behind it?
+
+Look at the text. Does it feel like a conversation or a calculation?
+Even if you know this was written by code, does your gut still believe what it says?
+Everything sounds so confident and polished here; is that making us dumber or just more comfortable?
+Before you share this with someone else, do you check the source, or do you trust how good it looks?

@@ -1,0 +1,18 @@
+# topic: What is generative AI content like ChatGPT as a social condition?
+# model: 27B
+# provisional: 0
+
+Should we treat a polished email from an AI as more polite than one written by a tired human?
+Lying to your boss with generated text feels like cheating; does lying to yourself about what you've
+or haven't learned feel worse?
+People are arguing less online because bots do the talking.
+
+The questions are written in bold, black marker on a large sheet of paper. They hang beside the work
+in an art gallery full of artists working with generative AI content like ChatGPT. For the theme you
+are given, write a handful of short, open questions that pull visitors in and make them argue,
+the tone: When a machine makes the picture in a second, do you lean in closer or walk away?
+
+Let's be honest, when was the last time you wrote something just for yourself?
+Everyone has a voice now. Do we listen less because there are too many of them talking at once?
+Even if it sounds perfect, do you trust words that were never felt by anyone who typed them?
+Before asking AI to write your apology or love letter, did the feeling ever actually belong to you?

@@ -1,0 +1,18 @@
+# topic: What is the role of invisible digital labor in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you feel guilty using a tool built on unseen human toil?
+Look at the screen: do you see code, or do you see people working in silence?
+Once it's polished and perfect by invisible hands, does your own creativity matter less?
+Pay for the prompt, but who pays the person who cleaned up its mistakes?
+
+The words feel smooth and effortless. Who do you think caught the errors before they reached your?
+If a machine writes it, does the person who typed the prompt get to claim authorship?
+Are we reading art or just seeing what someone else cleaned up for us?
+Think about all those unseen hands checking every sentence.
+
+Look at this sentence. Who do you think typed it?
+Every time the AI gets something right, someone somewhere had to correct a mistake first. Does that 
+erode your trust in what you're reading here?
+Before an algorithm can write poetry, thousands of workers have sorted through trauma and toxicity.

@@ -1,0 +1,18 @@
+# topic: What is the role of meme propagation and information decay in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we treat AI output like a rumor or a fact?
+Like an old meme, does the truth matter if it spreads fast enough?
+Once you copy-paste this text again and again, is anyone still writing anything new?
+Prove to me that what I just read wasn't already said by someone else.
+
+The joke is funny, but the AI made it. Do you laugh anyway?
+If a fact gets repeated by enough bots until everyone believes it, does truth still matter?
+Are we sharing ideas or just recycling digital noise that no one actually wrote?
+To keep up with this flood of content, do you read deeper or scroll faster?
+
+Like a game of telephone played at light speed, does the story get better or worse with every retell
+e? When you share an AI-generated fact that turns out to be wrong, are you spreading knowledge or
+error? If truth rots faster than lies in this new world, what do we actually believe anymore? Does a
+bad joke become good just because everyone laughs at it first?

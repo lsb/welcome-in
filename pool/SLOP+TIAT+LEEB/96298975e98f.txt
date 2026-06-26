@@ -1,0 +1,18 @@
+# topic: What is the role of surveillance and algorithmic visibility in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we be grateful that the machine knows us so well, or terrified by it?
+Look at your last search history: would you want a stranger to read it aloud in this room right now?
+Once an AI learns how you speak and think, do you still own those ideas, or does the algorithm?
+Privacy feels like hiding; visibility feels like being seen.
+
+The more it knows about you, the better your results get. Is that a fair trade?
+If an algorithm decides what gets seen and what stays hidden, who is really in charge of truth?
+Are we being watched to be helped, or just to be predicted?
+To make something new, do you have to give up some privacy first?
+
+Look at your own search history. Does it feel like a mirror or a cage?
+Every time you type, are you teaching the machine to know you better than you do?
+Even if no one is watching right now, does knowing they could change what you dare to ask?
+By feeding our words into this system, did we gain convenience or lose privacy for good money?

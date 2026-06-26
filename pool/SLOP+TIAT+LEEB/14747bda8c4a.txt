@@ -1,0 +1,18 @@
+# topic: What is generative AI content like ChatGPT as a psychological condition?
+# model: 27B
+# provisional: 0
+
+Should we treat a chatbot like a friend or a mirror?
+Losing your train of thought to an algorithm: is that laziness or evolution?
+Or are you just outsourcing the hard work of being human.
+Prompting for compliments instead of earning them from people who know you, what does it cost us in?
+
+The machine never gets tired, so why do you?
+Is it comforting to be understood by something that doesn't care about your feelings?
+Are we talking to a tool or confessing to a mirror?
+To whom are you really speaking when the screen replies instantly and perfectly?
+
+Look at your phone. When you type a prompt instead of writing the email yourself, do you feel like a
+editor or an author? If ChatGPT finishes your sentence before you think it, are you being helped or
+emptied out? Does getting exactly what you asked for make you trust the answer more than if someone
+began to disagree with you?

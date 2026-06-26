@@ -1,0 +1,18 @@
+# topic: What is the role of attention, engagement, and optimization in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you read it all, or just skim for the answer?
+Letting an algorithm guess what you want next: helpful shortcut or slow loss of control?
+Optimized to keep your eyes on screen. Are they keeping them there because it matters, or because it
+pleases?
+
+The machine gives you exactly what it thinks you want. Is that a mirror or a cage?
+If the answer is perfect, did we really learn anything by reading it?
+Are we training these tools to understand us, or are they teaching us how to be predictable?
+To get better results, do you have to become more like an algorithm and less like yourself?
+
+Look at this text. Does it feel like someone spoke to you, or did a machine calculate the most likew
+ely next word? If an AI writes your email perfectly in seconds, are you saving time for connection, 
+erasing yourself from communication entirely? When every answer is optimized for clarity and pleasur
+bility, what happens to the messy parts of thinking that actually teach us something new?

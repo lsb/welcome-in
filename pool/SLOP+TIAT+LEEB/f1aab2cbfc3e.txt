@@ -1,0 +1,18 @@
+# topic: What is the role of meme propagation and information decay in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you share a joke that might be fake, or keep it to yourself?
+Letting the truth rot faster than the lie: is that progress or decay?
+Once an idea becomes common knowledge for everyone and no one, does it still matter who started it?
+Pretend this text was written by someone. Now pretend it wasn't.
+
+The joke is funny, but the punchline was never real. Does that make it less true?
+If a fact gets repeated by ten thousand bots until no human remembers its origin, does truth still m
+atter? You share a meme because you think it's clever or just to keep your finger on the pulse of 
+the internet.
+
+Let's say you're a meme. How many times do you have to be repeated before the original joke is gone?
+Every time AI rewrites something, it gets slightly blurrier. At what point does truth become just a 
+echo of an echo?
+Before this tech existed, we shared things because they were funny or true.

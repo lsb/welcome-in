@@ -1,0 +1,18 @@
+# topic: What is the role of realism, hallucination, and machine perception in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we trust a machine that sounds more human than the person sitting next to you?
+Let's argue: is it better if AI tells us what actually happened, or makes up something beautiful and
+or does its mistakes reveal how broken our own understanding of reality really is?
+Prompt engineering feels like magic.
+
+The machine says it saw a sunset, but there was no sun. Do you believe the description or doubt your
+if an AI writes a perfect apology letter for someone who doesn't care, is that honesty or just good
+a robot describes pain without feeling it. Is its story less real than yours because it has never b
+the machine gets facts wrong with total confidence.
+
+Look at this sentence. Does it feel true because it makes sense, or just because the machine learned
+everyone else says so? If a bot tells you something that sounds completely real but is totally made
+e up, are we all becoming bad judges of truth? When an AI writes like your friend did last week, do
+be miss them more or less now?

@@ -1,0 +1,18 @@
+# topic: What is the role of invisible digital labor in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you feel guilty when a machine gives an answer that was polished by someone earning minimums?
+Look at the text on screen: do you see code, or do you see exhausted hands in another country?
+One click costs nothing to us. What does it cost them?
+Pay for your subscription with pride, or pay more because of who is working behind the scenes?
+
+The voice sounds so human. Who is the person on the other end of that smoothness?
+If you had to pay for every word it generates, would you still type as much?
+A machine doesn't get tired. Does that make its work more valuable or less real than yours?
+Think about your last search result.
+
+Look at this text. Who do you think actually wrote it?
+Every time the AI gets something right, someone somewhere had to correct a mistake first. Do you see
+every prompt is answered by thousands of unseen hands typing in low-wage countries. Does knowing who
+built the foundation change how much value you place on what sits on top?

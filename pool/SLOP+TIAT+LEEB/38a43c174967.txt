@@ -1,0 +1,18 @@
+# topic: What is the role of surveillance and algorithmic visibility in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Since the AI learns from everything we type, are you talking to a tool or feeding it?
+Look at your last search history: would you want that used as training data for someone else's bot?
+Or is privacy just something rich people get to keep while everyone else becomes content?
+Pay with attention.
+
+The more it knows about you, the better your results get. Is that a fair trade?
+If an algorithm predicts what you want to say before you do, are those still your words?
+Are we training these tools or letting them train us back?
+To make something new here, did you have to give up some privacy first?
+
+Look at the words on this screen. How many of them were taken from your own conversations?
+Every time you type a prompt, are you creating art or feeding data to something that will learn how?
+Even if no one knows it's watching, does knowing change what you're willing to say out loud?
+Because an algorithm can predict exactly what I want next, am I being understood or just managed by?

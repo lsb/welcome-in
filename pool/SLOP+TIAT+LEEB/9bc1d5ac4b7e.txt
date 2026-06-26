@@ -1,0 +1,18 @@
+# topic: What is the role of authorship, attribution, and remix culture in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should the person who typed the prompt get credit, or is it just a lucky guess?
+Let's say you fix every mistake in an AI essay. Is that your work now?
+Or did you just edit someone else's thoughts for free?
+Plagiarism used to mean copying words.
+
+The prompt asks for a question card on the wall of an art gallery featuring generative AI works.
+I need to write short, open questions about authorship, attribution, and remix culture in this new A
+and take sides. They should be plain, direct, rooted in everyday experience. No preamble or answers.
+The tone example provided is: When a machine makes the picture in a second...
+
+Let's be honest: if you didn't write the words, can you really claim them as yours?
+Ever copied a meme or retweeted something and called it your own thought. Is this any different than
+ever had to credit someone for their work before AI came along? How does that feel now when the 'who
+been told all our lives that originality is sacred.

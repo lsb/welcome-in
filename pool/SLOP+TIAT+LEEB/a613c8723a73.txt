@@ -1,0 +1,18 @@
+# topic: What is the weaponization of generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you trust a message from your boss if it sounds too perfect?
+Let the machine write the apology, or should you type every word yourself?
+Once lies are cheaper than truth, how do we know what's real anymore?
+Punish the person who used AI to cheat, or the company that built it?
+
+The text on the screen looks perfect. Do you believe it, or do you assume someone is trying to trick
+it? When a stranger sends you a message that feels too smooth and polite, does your stomach drop or
+a smile form? If an AI can write better emails than I can, am I being replaced by code or just freed
+to be lazy?
+
+Let's talk about the weaponization of generative AI content like ChatGPT.
+Every day, we see how these tools are being used to spread misinformation and manipulate public 
+emotion. How do you think this affects our ability to trust what we read online? What role should 
+be held accountable for ensuring that such technologies aren't misused?

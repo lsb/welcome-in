@@ -1,0 +1,18 @@
+# topic: What is the role of automation, bureaucracy, and interface rituals in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you trust the answer because it sounds confident, or doubt it because no one actually checked
+ls there a difference between following instructions and being told what to do? When does clicking '
+or typing become just another form of obedience. If the interface decides how you ask questions, is 
+person asking them at all?
+
+The prompt asks for a question card in an art gallery context, focusing on automation, bureaucracy, 
+interface rituals. The tone should be plain, direct, rooted in everyday experience. Only questions; 
+and no preamble or answers. I need to write short open-ended questions that provoke thought and 
+the visitor's engagement with the theme of generative AI content like ChatGPT.
+
+Let's be honest: do you actually read the output, or just skim for what looks right?
+Every time a prompt is rejected as unsafe, who feels more controlled by the system than you?
+Even if it saves hours of work, does clicking 'generate' feel like cheating your own effort?
+Between typing words and hitting enter, which step makes you feel most disconnected from the result?
