@@ -2,7 +2,7 @@
 # model: 27B
 # provisional: 0
 
-Should you feel guilty for enjoying something that no human hand touched?
-Like or dislike it, but does the fact that a machine made it change how beautiful it is to you?
-On what basis should we judge an image created by code rather than paint and sweat. Is there any way
-please provide me with three questions based on this theme in short format only please don't give.
+Should we judge the text by its cleverness or by how much effort it took to write?
+Loves me, loves me not: is an AI-generated poem more honest because no human ego was involved in it?
+Or does a lack of scars make a story less worth reading?
+Pretend this essay was written for money.

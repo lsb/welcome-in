@@ -22,7 +22,8 @@ import threading
 import time
 
 from acrostics import AcrosticSpec, acrostics_signature, load_acrostics
-from cards import GenerationAborted, build_decoders, make_llm, synthesize_card
+from cards import (CardRejected, GenerationAborted, build_decoders, make_llm,
+                   synthesize_card)
 from pool import CardPool
 from questions import TOPICS
 
@@ -101,6 +102,9 @@ class PoolProducer:
                 text = self.make_card(topic)
             except GenerationAborted:
                 break                         # shutdown mid-card
+            except CardRejected as e:
+                print(f"[producer] dropped a leaky card: {e}")
+                continue                      # rare; just try again, no idle wait
             except Exception as e:
                 print(f"[producer] generation failed: {e}")
                 self._stop.wait(self.idle_sleep)
@@ -144,7 +148,11 @@ def main(argv: list[str] | None = None) -> int:
         if topic is None:
             print(f"[producer] pool full ({cap}/topic); done.")
             break
-        text = prod.make_card(topic)
+        try:
+            text = prod.make_card(topic)
+        except CardRejected as e:
+            print(f"[producer] dropped a leaky card, retrying topic: {e}")
+            continue
         path = pool.insert_card(topic, text, model=args.producer_model)
         made += 1
         print(f"[producer] {made:4d}  {topic[:50]!r:52}  -> {path}")

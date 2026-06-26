@@ -7,10 +7,10 @@ ls there a difference between following instructions and being told what to do? 
 or typing become just another form of obedience. If the interface decides how you ask questions, is 
 person asking them at all?
 
-The prompt asks for a question card in an art gallery context, focusing on automation, bureaucracy, 
-interface rituals. The tone should be plain, direct, rooted in everyday experience. Only questions; 
-and no preamble or answers. I need to write short open-ended questions that provoke thought and 
-the visitor's engagement with the theme of generative AI content like ChatGPT.
+The prompt is just a box to fill. Does the way you type matter more than what you say?
+If the machine does all the work, are you still an artist or just a manager of prompts?
+Are we being helped by these tools, or trained to think like them?
+To get good results, do we have to learn its rules instead of our own voice?
 
 Let's be honest: do you actually read the output, or just skim for what looks right?
 Every time a prompt is rejected as unsafe, who feels more controlled by the system than you?

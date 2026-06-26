@@ -2,10 +2,10 @@
 # model: 27B
 # provisional: 0
 
-Should we be worried that our friends are sounding more like machines?
-Let's talk about how AI is changing the way people connect and communicate.
-Or maybe it's just making us all a bit too polite for comfort?
-Pretend you're having dinner with someone who uses ChatGPT to write their texts.
+Should we treat a chatbot's advice like a friend's or a manual?
+Lying to an AI feels safer than lying to people; does that make us more honest with humans, or less?
+Once you outsource your writing and thinking to the machine, who are you when it turns off?
+Polite words from code sound nicer than rude ones from a person; do we prefer fake kindness over gr?
 
 The text is perfect, but the person behind it feels hollow. Do you care?
 If your friend writes a better apology than they could ever say out loud, does it count as real?
