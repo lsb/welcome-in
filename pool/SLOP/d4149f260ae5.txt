@@ -1,0 +1,8 @@
+# topic: What is the role of meme propagation and information decay in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you share a fact if it sounds right, even when the source is opaque?
+Like a meme that changes as it spreads, how much truth can survive before it becomes fiction?
+Once an AI repeats your lie to everyone else, who owns the error now?
+Part of what makes us human is forgetting; does this technology rob us of our mistakes too?

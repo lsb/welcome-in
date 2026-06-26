@@ -1,0 +1,8 @@
+# topic: What is the role of surveillance and algorithmic visibility in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we be flattered or scared that a machine knows us better than our friends do?
+Lose your privacy to get the perfect answer, or keep it and guess wrong?
+Once you are trained into an algorithm, can you ever really leave?
+Price of convenience: how much of yourself will you trade for one good sentence?

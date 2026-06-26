@@ -1,0 +1,8 @@
+# topic: What is the role of automation, bureaucracy, and interface rituals in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Since the machine does all the work, are you actually creating or just ordering?
+Like a self-checkout kiosk that says 'unexpected item in bag,' do these errors make us feel more or 
+or less human than when we made mistakes by hand?
+Prompting feels like filling out a form; is this new artistry or just digital paperwork?

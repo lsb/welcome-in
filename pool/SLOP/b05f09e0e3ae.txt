@@ -1,0 +1,8 @@
+# topic: What is generative AI content like ChatGPT as an economic condition?
+# model: 27B
+# provisional: 0
+
+Should we pay for the prompt or the output?
+Lose your job to a machine, but get cheaper services. Is that progress or poverty?
+One person makes what used to take ten teams of workers. Who gets rich and who goes broke?
+Price is zero when supply is infinite.

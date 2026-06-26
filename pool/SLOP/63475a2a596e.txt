@@ -1,0 +1,8 @@
+# topic: What is the role of glitches, compression artifacts, and degraded media in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you fix the error or let it stay as proof that a machine made this?
+Listen to the stutter in its voice. Does it sound more human because of the mistake, or less?
+Once the internet is full of perfect fakes, will we start craving things that look broken and real?
+Pay attention: when does a glitch feel like an accident, and when does it feel like art?

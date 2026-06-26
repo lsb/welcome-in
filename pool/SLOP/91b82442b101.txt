@@ -1,0 +1,8 @@
+# topic: What is the role of realism, hallucination, and machine perception in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we fix the lies a machine tells, or let them stay as proof it isn't human?
+Lies that sound exactly like truth feel more dangerous than obvious nonsense. Do you trust what is  
+or what feels right? 
+perception of reality does not equal truth.

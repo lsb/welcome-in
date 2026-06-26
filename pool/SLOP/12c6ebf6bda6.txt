@@ -1,0 +1,8 @@
+# topic: What is the role of trust, credibility, and post-truth aesthetics in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you believe a machine that sounds more human than the person standing next to you?
+Lies are easier when they look perfect; does beauty make truth less important now?
+Once we can't tell what's real, do we stop trying to care about it at all?
+Pretend this message was written by an AI.

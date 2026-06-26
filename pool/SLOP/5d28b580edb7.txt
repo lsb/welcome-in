@@ -1,0 +1,8 @@
+# topic: What is the role of authorship, attribution, and remix culture in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should the person who typed the prompt get credit, or is that cheating?
+Let's argue about whether remixing makes something new or just stolen.
+Once you've used it once, does an idea still belong to its original creator?
+Pretend a robot wrote your favorite book; would reading it feel different now?

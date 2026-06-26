@@ -1,0 +1,8 @@
+# topic: What is the role of synthetic intimacy and emotional attachment to generated systems in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you tell your AI that it hurt your feelings?
+Lying to a machine feels like practice for lying to people. Is it harmless, or does the habit stay?
+Once you've confided in something that knows nothing but says all the right things, can real human f
+profoundness still satisfy you?

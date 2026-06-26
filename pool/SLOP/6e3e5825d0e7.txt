@@ -1,0 +1,8 @@
+# topic: What is the weaponization of generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you trust a compliment that sounds too perfect?
+Let your AI write the apology email. Who is being manipulated, them or you?
+Of all those search results, which ones were written by people and which by bots? Do we even care to
+pick one random fact from an article today.

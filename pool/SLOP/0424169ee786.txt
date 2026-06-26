@@ -1,0 +1,8 @@
+# topic: What is an embodiment of generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we thank the machine or blame it when the words feel too human?
+Let this text pass as yours to save time, but can you live with that lie later on?
+Once a thought comes from code instead of skin and bone, does it still count as truth?
+Pay for something made by a server farm; is your money buying art or just speed now?

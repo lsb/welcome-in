@@ -1,0 +1,8 @@
+# topic: What is the role of invisible digital labor in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you feel guilty every time you hit enter?
+Look at the screen: do you see a miracle or a sweatshop?
+Once your prompt is processed, does it belong to them now too?
+Pretend there are no humans behind this code.

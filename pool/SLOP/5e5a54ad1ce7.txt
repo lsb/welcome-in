@@ -1,0 +1,8 @@
+# topic: What is generative AI content like ChatGPT as an aesthetic condition?
+# model: 27B
+# provisional: 0
+
+Should you feel guilty for enjoying something that no human hand touched?
+Like or dislike it, but does the fact that a machine made it change how beautiful it is to you?
+On what basis should we judge an image created by code rather than paint and sweat. Is there any way
+please provide me with three questions based on this theme in short format only please don't give.

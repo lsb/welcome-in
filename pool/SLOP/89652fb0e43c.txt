@@ -1,0 +1,8 @@
+# topic: What is the role of attention, engagement, and optimization in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you pay for content that was made in seconds?
+Like the result, or do you care how much effort went into it?
+Optimization means giving people what they want. Is there anything left to surprise us with?
+Perfectly smooth words feel fake to me.

@@ -1,0 +1,8 @@
+# topic: What is generative AI content like ChatGPT as a social condition?
+# model: 27B
+# provisional: 0
+
+Should we grade students on their prompts or their thoughts?
+Let your AI write the email, but who takes the blame when it goes wrong?
+Our friends are getting more real while our tools get less. Is that progress?
+Pay for a human to listen, pay an algorithm to answer: which is cheaper loneliness?
