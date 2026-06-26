@@ -168,7 +168,7 @@ class Kiosk:
     # -- worker: load, then run capture/detect + control loops -----------
     def _run(self) -> None:
         try:
-            self._post(("status", "warming up the gallery..."))
+            self._post(("status", "Preheating..."))
             from clip_tags import ClipTagger
             from face_gate import FaceGate
             from greeter import Greeter
@@ -270,7 +270,7 @@ class Kiosk:
                 # here" acknowledgement. Only post on the transition.
                 status = "present" if snap.present else "idle"
                 if status != last_status:
-                    self._post(("status", "someone's here") if snap.present
+                    self._post(("status", "Noticing...") if snap.present
                                else ("clear",))
                     last_status = status
                 # Fire once a near face is frontal (and, if dwell>0, has held it).
@@ -389,7 +389,7 @@ class Kiosk:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         wrap = max(400, self.root.winfo_screenwidth() - 240)
-        self.status_var = tk.StringVar(value="warming up the gallery...")
+        self.status_var = tk.StringVar(value="Preheating...")
         self.hello_var = tk.StringVar(value="")
         self.topic_var = tk.StringVar(value="")
         self.card_var = tk.StringVar(value="")
@@ -479,10 +479,10 @@ class Kiosk:
             self.hello_var.set("")
             self.topic_var.set("")
             self.card_var.set("")
-            self.status_var.set("greeting you...")
+            self.status_var.set("Greeting...")
         elif kind == "clothing":
             if msg[1]:
-                self.status_var.set(f"noticing your {msg[1]}...")
+                self.status_var.set(f"Noticing your {msg[1]}...")
         elif kind == "delta":
             if msg[1] == "hello":
                 self._hello += msg[2]
@@ -495,9 +495,9 @@ class Kiosk:
             self.hello_var.set(hello)
             self.topic_var.set(f"- {topic} -")
             self.card_var.set(questions)
-            self.status_var.set("your card is printing - take it as you come in"
+            self.status_var.set("Printing..."
                                 if self.printer.enabled
-                                else "linger on these as long as you like")
+                                else "Lingering...")
         elif kind == "clear":
             self._idle()
 
@@ -510,7 +510,7 @@ class Kiosk:
         self.hello_label.config(font=self._idle_font)
         self.hello_var.set(_IDLE_HELLO)
         self.topic_var.set(_IDLE_SUBTITLE)
-        self.status_var.set("")
+        self.status_var.set("Awaiting your gaze...")
         if not self._idle_running:
             self._card = ""
             self.card_var.set("")
