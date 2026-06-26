@@ -28,7 +28,6 @@ until they've been gone `clear_after` seconds, then the door re-arms.
 from __future__ import annotations
 
 import argparse
-import gc
 import queue
 import re
 import threading
@@ -88,7 +87,7 @@ class Snapshot:
 
 
 class Kiosk:
-    def __init__(self, model: str = "0.8B", cam_index: int = 0, fullscreen: bool = True,
+    def __init__(self, cam_index: int = 0, fullscreen: bool = True,
                  detect_interval: float = 0.1, dwell: float = 0.0, min_show: float = 8.0,
                  abort_after: float = 1.5, clear_after: float = 4.0, cooldown: float = 3.0,
                  near_prox: float = 0.10, warmup: bool = True,
@@ -97,7 +96,6 @@ class Kiosk:
                  word_ms: int = 30, producer_enabled: bool = True,
                  producer_model: str = "27B", producer_threads: int | None = None,
                  idle_hold_s: float = 10.0, idle_enabled: bool = True):
-        self.model = model                       # warmup/seed model (small, e.g. 0.8B)
         self.cam_index = cam_index
         self.fullscreen = fullscreen
         self.detect_interval = detect_interval   # seconds between detections
@@ -107,7 +105,7 @@ class Kiosk:
         self.clear_after = clear_after           # re-arm once gone this long
         self.cooldown = cooldown                 # stay quiet this long after a greeting ends
         self.near_prox = near_prox               # min face box height to count as near
-        self.warmup = warmup                     # seed one provisional card on startup
+        self.warmup = warmup                     # warm BlazeFace + CLIP on startup
         self.warmup_image = warmup_image
         # Pool / serving: the card comes pre-generated from the pool; the live
         # serve path does no model work (it types the pulled card to screen).
@@ -189,8 +187,7 @@ class Kiosk:
                         self.producer_model if self.producer_enabled else "serve-only"))
             if self.warmup:
                 self._warmup()
-            # Start the producer AFTER warmup so the small seed model is freed before
-            # the 27B loads (matters on the 16 GB Pi where they'd otherwise overlap).
+            # Start the background producer to top the pool up past the committed floor.
             if self.producer_enabled:
                 from producer import PoolProducer
 
@@ -211,12 +208,12 @@ class Kiosk:
         self._control_loop()
 
     def _warmup(self) -> None:
-        """Warm the cheap serve-path models (BlazeFace + CLIP) on a sample image so
-        the first visitor doesn't pay first-call overhead, and — only if the pool is
-        empty for this acrostic — seed it with ONE provisional card from the small
-        model so the door is never blank before the 27B producer has produced
-        anything. The small model is loaded and freed here (so it isn't resident
-        when the 27B producer loads next). A pre-filled pool skips the seed entirely."""
+        """Warm the only models the serve path uses — BlazeFace + CLIP — on a sample
+        image, so the first visitor doesn't pay first-call overhead. Nothing else
+        loads at startup: the cards are pre-generated in the committed pool, so there
+        is no generation model to seed here (an empty pool falls back to greeter's
+        static card). This is the whole of "do nothing for startup but detect + read
+        clothing + serve text"."""
         img = Path(self.warmup_image)
         if not img.is_absolute():
             img = Path(__file__).resolve().parent / img   # robust to a service cwd
@@ -234,25 +231,6 @@ class Kiosk:
             print(f"[kiosk] warmup image {img} not found; skipping detector/CLIP warm")
         except Exception as e:
             print(f"[kiosk] detector/CLIP warm failed: {e}")
-
-        if self.pool.total_count() > 0:
-            return  # pool already has cards (pre-filled or prior real cards)
-        self._post(("status", "preparing the first card..."))
-        try:
-            from cards import build_decoders, make_llm, synthesize_card
-            from questions import TOPICS
-
-            t = time.perf_counter()
-            llm = make_llm(self.model)                     # small seed model (0.8B)
-            decoders = build_decoders(llm, self.acrostics, no_think=False)
-            text = synthesize_card(decoders, self.acrostics, TOPICS[0],
-                                   seed_base=int(time.time()))
-            self.pool.insert_card(TOPICS[0], text, model=self.model, provisional=True)
-            del decoders, llm
-            gc.collect()                                   # free the seed model
-            print(f"[kiosk] seeded 1 provisional card in {time.perf_counter() - t:.1f}s")
-        except Exception as e:
-            print(f"[kiosk] pool seed failed: {e}")
 
     def _detect_loop(self) -> None:
         """Capture + detect, forever, on its own thread. Publishes a Snapshot per
@@ -661,8 +639,6 @@ class Kiosk:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="welcome-in live kiosk")
-    p.add_argument("--model", choices=["0.8B", "2B", "27B"], default="0.8B",
-                   help="model for the startup pool seed (warmup card) (default: 0.8B)")
     p.add_argument("--cam", type=int, default=0, help="USB camera index (default: 0)")
     p.add_argument("--windowed", action="store_true",
                    help="run in a window instead of full-screen")
@@ -675,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--near-prox", type=float, default=0.10,
                    help="min face box height (0..1) to count as a near visitor (default 0.10)")
     p.add_argument("--no-warmup", dest="warmup", action="store_false",
-                   help="skip the startup detector/CLIP warm + pool seed")
+                   help="skip the startup BlazeFace + CLIP warm")
     p.add_argument("--warmup-image", default="6.png",
                    help="image for the startup warmup pass (default: 6.png)")
     # Pool / producer
@@ -697,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-idle", dest="idle_enabled", action="store_false",
                    help="disable the ambient idle-card rotation (static WELCOME IN only)")
     args = p.parse_args(argv)
-    Kiosk(model=args.model, cam_index=args.cam, fullscreen=not args.windowed,
+    Kiosk(cam_index=args.cam, fullscreen=not args.windowed,
           dwell=args.dwell, abort_after=args.abort_after, cooldown=args.cooldown,
           near_prox=args.near_prox, warmup=args.warmup, warmup_image=args.warmup_image,
           pool_root=args.pool_root, pool_cap=args.pool_cap, acrostics_csv=args.acrostics_csv,
