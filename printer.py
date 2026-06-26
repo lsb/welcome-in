@@ -33,6 +33,9 @@ from __future__ import annotations
 import os
 import subprocess
 import textwrap
+import uuid
+from datetime import datetime
+from pathlib import Path
 
 _OFF = frozenset({"off", "none", "no"})
 
@@ -75,8 +78,32 @@ _GAP_AFTER_HELLO = 24.0               # set the hello apart from the card below
 _BYLINE = "by Lee Butterman"          # signature pinned to the lower-left corner
 _BYLINE_PT = 10.0                     # small serif italic, like the screen byline
 
+# Every card we send to the printer is also logged here, one plain-text file per
+# card — a standing archive of what the installation has handed out. The directory
+# is kept in the repo by an empty printouts/.gitignore; the logs are written at run
+# time. Anchored to this file's parent so it resolves the same under a service cwd.
+_PRINTOUTS = Path(__file__).resolve().parent / "printouts"
 
-def card_postscript(greeting, cpi: int = 12) -> str:
+
+def _ordinal(n: int) -> str:
+    """1 -> '1st', 2 -> '2nd', 3 -> '3rd', 11..13 -> 'th', else by last digit."""
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _dated_byline(now: datetime) -> str:
+    """The lower-left signature, stamped with when the card printed, e.g.
+    'by Lee Butterman, June 2026, Friday the 26th, 3:36pm'."""
+    h12 = now.hour % 12 or 12
+    ampm = "am" if now.hour < 12 else "pm"
+    return (f"{_BYLINE}, {now:%B %Y}, {now:%A} the {_ordinal(now.day)}, "
+            f"{h12}:{now:%M}{ampm}")
+
+
+def card_postscript(greeting, cpi: int = 12, byline: str = _BYLINE) -> str:
     """Render the finished card as a one-page PostScript document for ``lp``.
 
     The hello is wrapped at 80 columns and set in a serif proportional italic;
@@ -134,7 +161,7 @@ def card_postscript(greeting, cpi: int = 12) -> str:
     # Signature pinned to the lower-left corner, at a fixed baseline above the
     # bottom margin so it sits in the same spot regardless of how the card flows.
     out.append(f"/Times-Italic {_BYLINE_PT:g} selectfont")
-    out.append(f"{_MARGIN:g} {_MARGIN:.1f} moveto ({_ps_escape(_asciify(_BYLINE))}) show")
+    out.append(f"{_MARGIN:g} {_MARGIN:.1f} moveto ({_ps_escape(_asciify(byline))}) show")
 
     out.append("showpage")
     return "\n".join(out) + "\n"
@@ -155,19 +182,44 @@ class Printer:
         return cls(queue=(q or None), enabled=True, cpi=cpi)
 
     def print_card(self, greeting) -> None:
-        """Print the finished card. Quietly reports (rather than raises) on
-        failure, so a printer hiccup never takes down the greeter. ``lp``
-        autodetects the PostScript from its `%!PS` header and lays out the page
-        itself (the document carries its own landscape orientation and fonts),
-        so no `-o landscape`/`cpi` text options are needed."""
+        """Print the finished card and log it to the printouts archive. Quietly
+        reports (rather than raises) on failure, so a printer hiccup never takes
+        down the greeter. ``lp`` autodetects the PostScript from its `%!PS` header
+        and lays out the page itself (the document carries its own landscape
+        orientation and fonts), so no `-o landscape`/`cpi` text options are needed.
+
+        The lower-left byline is stamped with the print time, and the same moment
+        names the log file, so the screen card, the paper card, and the archive all
+        agree on when the card was handed out."""
         if not self.enabled:
             return
+        now = datetime.now()
+        byline = _dated_byline(now)
+        ps = card_postscript(greeting, self.cpi, byline=byline)
+        self._log_printout(greeting, now, byline)
         cmd = ["lp", "-t", "welcome-in"]
         if self.queue:
             cmd[1:1] = ["-d", self.queue]
         try:
-            subprocess.run(cmd, input=card_postscript(greeting, self.cpi).encode("ascii"),
+            subprocess.run(cmd, input=ps.encode("ascii"),
                            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         except (OSError, subprocess.CalledProcessError) as e:
             detail = e.stderr.decode().strip() if isinstance(e, subprocess.CalledProcessError) and e.stderr else e
             print(f"[printer] could not print the card: {detail}")
+
+    def _log_printout(self, greeting, now: datetime, byline: str) -> None:
+        """Append a plain-text record of this card to the printouts archive — a
+        standing log of everything the installation has handed out, mirroring the
+        printed layout (dated byline, hello, theme, question card). Best-effort: a
+        logging hiccup is reported, never raised, so it can't fail a print. Written
+        UTF-8 so the record keeps any typographic characters the paper card flattens
+        to ASCII."""
+        try:
+            _PRINTOUTS.mkdir(parents=True, exist_ok=True)
+            path = _PRINTOUTS / f"{now:%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}.txt"
+            path.write_text(
+                f"{byline}\n\n{greeting.hello}\n\n- {greeting.topic} -\n\n"
+                f"{greeting.questions}\n",
+                encoding="utf-8")
+        except OSError as e:
+            print(f"[printer] could not log the printout: {e}")
