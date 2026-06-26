@@ -27,6 +27,11 @@ from pool import CardPool
 from questions import TOPICS
 
 
+# Qwen's own recommended sampling temperature for these models; higher than the
+# tiny-model greeter's tuned 0.3, and it gives noticeably more varied cards.
+PRODUCER_TEMPERATURE = 0.6
+
+
 class PoolProducer:
     def __init__(self, pool: CardPool, acrostics: tuple[AcrosticSpec, ...],
                  model: str = "27B", topics: tuple[str, ...] = TOPICS,
@@ -62,7 +67,8 @@ class PoolProducer:
     def _load(self) -> None:
         self._llm = make_llm(self.model, n_threads=self.n_threads)
         self._decoders = build_decoders(self._llm, self.acrostics,
-                                        no_think=self.no_think)
+                                        no_think=self.no_think,
+                                        temperature=PRODUCER_TEMPERATURE)
 
     def _next_topic(self) -> str | None:
         """The question most in need of cards: lowest real-card count, under cap.

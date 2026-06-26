@@ -31,15 +31,18 @@ def make_llm(size: str, n_ctx: int = 2048, n_threads: int | None = None):
 
 
 def build_decoders(llm, acrostics: tuple[AcrosticSpec, ...], *,
-                   no_think: bool = False) -> dict[str, AcrosticDecoder]:
+                   no_think: bool = False,
+                   temperature: float | None = None) -> dict[str, AcrosticDecoder]:
     """One AcrosticDecoder per acrostic spec (each compiles its grammar once), all
-    sharing the single llm. Pass ``no_think=True`` for a reasoning model (27B)."""
+    sharing the single llm. ``no_think=True`` for a reasoning model (27B);
+    ``temperature`` overrides the decoder default (higher = more varied cards)."""
+    temp_kw = {} if temperature is None else {"temperature": temperature}
     return {
         spec.secret: AcrosticDecoder(
             llm, paragraphs=(spec.secret,),
             min_line=spec.min_line if spec.min_line is not None else DEFAULT_MIN_LINE,
             max_line=spec.max_line if spec.max_line is not None else DEFAULT_MAX_LINE,
-            no_think=no_think)
+            no_think=no_think, **temp_kw)
         for spec in acrostics
     }
 
