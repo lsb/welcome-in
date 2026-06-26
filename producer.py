@@ -27,9 +27,10 @@ from pool import CardPool
 from questions import TOPICS
 
 
-# Qwen's own recommended sampling temperature for these models; higher than the
-# tiny-model greeter's tuned 0.3, and it gives noticeably more varied cards.
-PRODUCER_TEMPERATURE = 0.6
+# Qwen's recommended sampling temperature for non-thinking mode (which is how the
+# producer runs — reasoning off). Higher than the tiny-model greeter's tuned 0.3;
+# this is an art installation, so we lean into the extra variety.
+PRODUCER_TEMPERATURE = 0.7
 
 
 class PoolProducer:
