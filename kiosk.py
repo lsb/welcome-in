@@ -1,20 +1,22 @@
 """The installation: a live doorway greeter with a printed card.
 
-Wires the existing pipeline into a standing kiosk. A USB webcam (camera.py) feeds
+Wires the pipeline into a standing kiosk. A USB webcam (camera.py) feeds
 ``FaceGate.analyze`` a few times a second; when a visitor faces the camera, the
-greeting **streams onto a full-screen display as the model writes it** (tens of
-seconds on the Pi — the wait is the show, see greeter.py), and the finished
-question card is **printed** for them to take (printer.py, CUPS landscape).
+templated hello appears at once and a **pre-generated question card is pulled from
+the pool and typed onto the screen a word at a time** (pool.py / producer.py — the
+slow 27B writing happens in the background, so the serve path is instant), then the
+finished card is **printed** for them to take (printer.py, CUPS landscape).
 
-Structure — one generation stream, two sinks, behind a clean seam:
+Structure — a background producer fills the pool; the serve path just reveals + prints:
 
-  capture+detect thread          Tk main thread
-  ----------------------         --------------------------------
-  camera.frame()                 drains a queue every ~33 ms and is the *only*
-  gate.analyze()       --push-->  thing that touches widgets (Tk isn't thread-
-  on fire: greeter.greet(on_delta)  safe). Streamed deltas append live; on
-    -> screen deltas + final     "settle" the screen snaps to the finished text;
-    -> printer.print_card()      the printer fires once, complete.
+  capture+detect thread          Tk main thread              producer thread
+  ----------------------         ----------------------      -----------------
+  camera.frame()                 drains a queue every ~33 ms  27B (reasoning off)
+  gate.analyze()       --push-->  and is the *only* thing      makes cards and
+  on fire: _greet():              that touches widgets (Tk      writes them to the
+    pool.take_least_viewed()      isn't thread-safe). Reveal    pool (cards.py);
+    -> _type_card word deltas     deltas append live; "settle"  the serve path never
+    -> printer.print_card()       snaps to the final text.      touches the model.
 
 The screen is the live-text sink. Reskinning it (web / pygame) means swapping
 ``_handle`` / ``_build_ui`` — the capture/detect/greet loop and the sinks don't
@@ -26,14 +28,18 @@ until they've been gone `clear_after` seconds, then the door re-arms.
 from __future__ import annotations
 
 import argparse
+import gc
 import queue
+import re
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from acrostic import GenerationAborted
+from acrostics import acrostics_signature, load_acrostics
 from camera import Camera
+from pool import CardPool
 from printer import Printer
 
 _BG = "#0a0a0a"
@@ -74,8 +80,11 @@ class Kiosk:
                  detect_interval: float = 0.1, dwell: float = 0.0, min_show: float = 8.0,
                  abort_after: float = 1.5, clear_after: float = 4.0, cooldown: float = 3.0,
                  near_prox: float = 0.10, warmup: bool = True,
-                 warmup_image: str = "6.png"):
-        self.model = model
+                 warmup_image: str = "6.png", pool_root: str = "pool",
+                 pool_cap: int = 100, acrostics_csv: str | None = None,
+                 word_ms: int = 30, producer_enabled: bool = True,
+                 producer_model: str = "27B", producer_threads: int | None = None):
+        self.model = model                       # warmup/seed model (small, e.g. 0.8B)
         self.cam_index = cam_index
         self.fullscreen = fullscreen
         self.detect_interval = detect_interval   # seconds between detections
@@ -85,8 +94,18 @@ class Kiosk:
         self.clear_after = clear_after           # re-arm once gone this long
         self.cooldown = cooldown                 # stay quiet this long after a greeting ends
         self.near_prox = near_prox               # min face box height to count as near
-        self.warmup = warmup                     # full e2e pass on startup
+        self.warmup = warmup                     # seed one provisional card on startup
         self.warmup_image = warmup_image
+        # Pool / serving: the card comes pre-generated from the pool; the live
+        # serve path does no model work (it types the pulled card to screen).
+        self.acrostics = load_acrostics(acrostics_csv)
+        self.signature = acrostics_signature(self.acrostics)
+        self.pool = CardPool(pool_root, cap=pool_cap, signature=self.signature)
+        self.word_ms = word_ms                   # screen reveal cadence (per word)
+        self.producer_enabled = producer_enabled # run the 27B background producer
+        self.producer_model = producer_model
+        self.producer_threads = producer_threads
+        self.producer = None                     # PoolProducer, started after warmup
 
         self._q: queue.Queue = queue.Queue()
         self._stop = threading.Event()
@@ -140,12 +159,23 @@ class Kiosk:
 
             self.gate = FaceGate()
             self.tagger = ClipTagger()
-            self.greeter = Greeter(size=self.model).load()
+            # Serve mode: no model loaded here — the card comes pre-generated from the
+            # pool; the heavy 27B lives only in the background producer below.
+            self.greeter = Greeter(pool=self.pool).load()
             self.camera = Camera(index=self.cam_index)
-            self._post(("config", " ".join(self.greeter.paragraphs) or "off",
-                        f"{self.greeter.min_line}-{self.greeter.max_line}", self.model))
+            self._post(("config", self.signature, f"<={self.pool.cap}/q",
+                        self.producer_model if self.producer_enabled else "serve-only"))
             if self.warmup:
                 self._warmup()
+            # Start the producer AFTER warmup so the small seed model is freed before
+            # the 27B loads (matters on the 16 GB Pi where they'd otherwise overlap).
+            if self.producer_enabled:
+                from producer import PoolProducer
+
+                self.producer = PoolProducer(
+                    self.pool, self.acrostics, model=self.producer_model,
+                    n_threads=self.producer_threads,
+                    no_think=(self.producer_model == "27B"), cap=self.pool.cap).start()
             self._post(("clear",))   # drop into the standing WELCOME IN screen
         except Exception as e:  # surface startup failures on screen, don't crash silently
             self._post(("error", f"could not start: {e}"))
@@ -159,32 +189,48 @@ class Kiosk:
         self._control_loop()
 
     def _warmup(self) -> None:
-        """Run the whole pipeline once on a sample image before going live, so the
-        first real visitor doesn't pay first-call overhead — the lazy chat
-        formatter, llama.cpp's decode warmup, and the CLIP / face-gate paths. The
-        model is already loaded; this exercises the actual decode end to end, and
-        seeds the admin timing readout with its numbers."""
+        """Warm the cheap serve-path models (BlazeFace + CLIP) on a sample image so
+        the first visitor doesn't pay first-call overhead, and — only if the pool is
+        empty for this acrostic — seed it with ONE provisional card from the small
+        model so the door is never blank before the 27B producer has produced
+        anything. The small model is loaded and freed here (so it isn't resident
+        when the 27B producer loads next). A pre-filled pool skips the seed entirely."""
         img = Path(self.warmup_image)
         if not img.is_absolute():
             img = Path(__file__).resolve().parent / img   # robust to a service cwd
-        self._post(("status", f"warming up the gallery (running {img.name})..."))
+        self._post(("status", "warming up the gallery..."))
         try:
             t_det = time.perf_counter()
             res = self.gate.analyze(str(img))
             det_ms = (time.perf_counter() - t_det) * 1000.0
             t_clip = time.perf_counter()
-            compliment = self.tagger.compliment(str(img), res.box)
+            self.tagger.compliment(str(img), res.box)      # warm CLIP / ORT
             clip_ms = (time.perf_counter() - t_clip) * 1000.0
-            t_greet = time.perf_counter()
-            self.greeter.greet(res, compliment)
-            greet_ms = (time.perf_counter() - t_greet) * 1000.0
-            print(f"[kiosk] warmup {img.name}: detect {det_ms:.0f}ms  "
-                  f"clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
-            self._post(("timing", det_ms, clip_ms, greet_ms))
+            print(f"[kiosk] warmup {img.name}: detect {det_ms:.0f}ms  clip {clip_ms:.0f}ms")
+            self._post(("timing", det_ms, clip_ms, 0.0))
         except FileNotFoundError:
-            print(f"[kiosk] warmup image {img} not found; skipping warmup")
+            print(f"[kiosk] warmup image {img} not found; skipping detector/CLIP warm")
         except Exception as e:
-            print(f"[kiosk] warmup failed: {e}")
+            print(f"[kiosk] detector/CLIP warm failed: {e}")
+
+        if self.pool.total_count() > 0:
+            return  # pool already has cards (pre-filled or prior real cards)
+        self._post(("status", "preparing the first card..."))
+        try:
+            from cards import build_decoders, make_llm, synthesize_card
+            from questions import TOPICS
+
+            t = time.perf_counter()
+            llm = make_llm(self.model)                     # small seed model (0.8B)
+            decoders = build_decoders(llm, self.acrostics, no_think=False)
+            text = synthesize_card(decoders, self.acrostics, TOPICS[0],
+                                   seed_base=int(time.time()))
+            self.pool.insert_card(TOPICS[0], text, model=self.model, provisional=True)
+            del decoders, llm
+            gc.collect()                                   # free the seed model
+            print(f"[kiosk] seeded 1 provisional card in {time.perf_counter() - t:.1f}s")
+        except Exception as e:
+            print(f"[kiosk] pool seed failed: {e}")
 
     def _detect_loop(self) -> None:
         """Capture + detect, forever, on its own thread. Publishes a Snapshot per
@@ -288,11 +334,11 @@ class Kiosk:
             time.sleep(self.detect_interval)
 
     def _greet(self, snap: Snapshot) -> None:
-        """Run the expensive path for one (group of) visitor(s): read the closest
-        person's outfit, show the templated hello and stream the question card to the
-        screen, then print the finished card. Aborts (raising GenerationAborted) if
-        the audience leaves — `gone_for` keeps climbing on the detect thread while we
-        generate here."""
+        """Serve one (group of) visitor(s): read the closest person's outfit, show
+        the templated hello, pull a pre-generated card from the pool and TYPE it to
+        the screen a word at a time, then print it. No model runs here — the 27B work
+        happened in the background producer. Aborts (raising GenerationAborted) if the
+        audience leaves mid-reveal — `gone_for` keeps climbing on the detect thread."""
         self._post(("begin",))
         res, frame = snap.res, snap.frame
         t_clip = time.perf_counter()
@@ -302,21 +348,33 @@ class Kiosk:
             compliment = None
         clip_ms = (time.perf_counter() - t_clip) * 1000.0
         self._post(("clothing", compliment))
-        self._flush_ui()   # paint the appearance line before the card generation starts
+        self._flush_ui()   # paint the appearance line before the card reveals
 
-        t_greet = time.perf_counter()
-        greeting = self.greeter.greet(
-            res, compliment,
-            on_delta=lambda part, d: self._post(("delta", part, d)),
-            abort=lambda: self._stop.is_set() or self._snap.gone_for >= self.abort_after)
-        greet_ms = (time.perf_counter() - t_greet) * 1000.0
-        print(f"[kiosk] detect {snap.det_ms:.0f}ms  clip {clip_ms:.0f}ms  greet {greet_ms:.0f}ms")
-        self._post(("timing", snap.det_ms, clip_ms, greet_ms))
+        greeting = self.greeter.greet(res, compliment)   # instant pool pull, no model
+        self._post(("delta", "hello", greeting.hello))   # hello shows at once
+        t_show = time.perf_counter()
+        self._type_card(greeting.questions)              # word-by-word reveal, abortable
+        show_ms = (time.perf_counter() - t_show) * 1000.0
+        print(f"[kiosk] detect {snap.det_ms:.0f}ms  clip {clip_ms:.0f}ms  reveal {show_ms:.0f}ms")
+        self._post(("timing", snap.det_ms, clip_ms, show_ms))
 
-        # Snap the screen to the finished, settled text (the streamed text was raw;
-        # the printer and this 'settle' both use greeter's polished strings).
+        # Snap the screen to the settled text (same string the printer uses) and print.
         self._post(("settle", greeting.hello, greeting.topic, greeting.questions))
         self.printer.print_card(greeting)
+
+    def _type_card(self, text: str) -> None:
+        """Reveal a pooled card one word every ``word_ms`` so it streams onto the
+        screen fast enough to hold interest (the model already wrote it — this is
+        pure presentation, not generation). The split keeps each word's trailing
+        whitespace, so the blank-line stanza breaks survive and the SLOP/TIAT/LEEB
+        acrostic stays column-aligned as it appears. Polls the same abort signal as
+        the old streamed path: if nobody has faced for `abort_after`, it raises
+        GenerationAborted, which `_control_loop` catches to drop the card (no print)."""
+        for piece in re.findall(r"\S+\s*", text):
+            if self._stop.is_set() or self._snap.gone_for >= self.abort_after:
+                raise GenerationAborted()
+            self._post(("delta", "card", piece))
+            time.sleep(self.word_ms / 1000.0)
 
     # -- UI (main thread only) -------------------------------------------
     def _build_ui(self) -> None:
@@ -501,6 +559,9 @@ class Kiosk:
     def _on_close(self) -> None:
         self._closing = True
         self._stop.set()
+        if self.producer is not None:      # signal the 27B decode to tear down
+            self.producer.stop()
+        self.pool.close()
         if self.camera is not None:        # unblock a pending camera.frame()
             self.camera.close()
         self.root.destroy()
@@ -508,8 +569,8 @@ class Kiosk:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="welcome-in live kiosk")
-    p.add_argument("--model", choices=["0.8B", "2B"], default="0.8B",
-                   help="Qwen3.5 size (default: 0.8B)")
+    p.add_argument("--model", choices=["0.8B", "2B", "27B"], default="0.8B",
+                   help="model for the startup pool seed (warmup card) (default: 0.8B)")
     p.add_argument("--cam", type=int, default=0, help="USB camera index (default: 0)")
     p.add_argument("--windowed", action="store_true",
                    help="run in a window instead of full-screen")
@@ -522,13 +583,30 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--near-prox", type=float, default=0.10,
                    help="min face box height (0..1) to count as a near visitor (default 0.10)")
     p.add_argument("--no-warmup", dest="warmup", action="store_false",
-                   help="skip the startup end-to-end warmup pass")
+                   help="skip the startup detector/CLIP warm + pool seed")
     p.add_argument("--warmup-image", default="6.png",
                    help="image for the startup warmup pass (default: 6.png)")
+    # Pool / producer
+    p.add_argument("--pool-root", default="pool", help="card pool directory (default: pool)")
+    p.add_argument("--pool-cap", type=int, default=100,
+                   help="max pre-generated cards per question (default: 100)")
+    p.add_argument("--acrostics-csv", default=None,
+                   help="acrostics CSV (default: built-in SLOP/TIAT/LEEB)")
+    p.add_argument("--word-ms", type=int, default=30,
+                   help="screen reveal cadence, ms per word (default: 30)")
+    p.add_argument("--producer-model", choices=["0.8B", "2B", "27B"], default="27B",
+                   help="background producer model (default: 27B)")
+    p.add_argument("--producer-threads", type=int, default=None,
+                   help="llama n_threads for the producer (cap to spare detection)")
+    p.add_argument("--no-producer", dest="producer_enabled", action="store_false",
+                   help="serve from a pre-filled pool without running the producer")
     args = p.parse_args(argv)
     Kiosk(model=args.model, cam_index=args.cam, fullscreen=not args.windowed,
           dwell=args.dwell, abort_after=args.abort_after, cooldown=args.cooldown,
-          near_prox=args.near_prox, warmup=args.warmup, warmup_image=args.warmup_image).run()
+          near_prox=args.near_prox, warmup=args.warmup, warmup_image=args.warmup_image,
+          pool_root=args.pool_root, pool_cap=args.pool_cap, acrostics_csv=args.acrostics_csv,
+          word_ms=args.word_ms, producer_enabled=args.producer_enabled,
+          producer_model=args.producer_model, producer_threads=args.producer_threads).run()
     return 0
 
 

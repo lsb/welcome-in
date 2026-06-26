@@ -32,10 +32,13 @@ FACE_ONNX_ZIP_FALLBACK = (
 FACE_DIR = MODELS_DIR / "mediapipe_face-onnx-float"
 FACE_DETECTOR_ONNX = FACE_DIR / "face_detector.onnx"
 
-# Qwen3.5 GGUF (Q4_K_M) — good speed/quality balance for CPU.
+# GGUF greeters. Qwen3.5 0.8B/2B (Q4_K_M) are the small CPU models used for the
+# warmup seed and the live fallback; Qwen3.6 27B (Q3_K_M) is the heavy background
+# *producer* that pre-generates the pooled cards (reasoning off, see acrostic.py).
 GGUF_REPOS = {
     "0.8B": ("unsloth/Qwen3.5-0.8B-GGUF", "Qwen3.5-0.8B-Q4_K_M.gguf"),
     "2B": ("unsloth/Qwen3.5-2B-GGUF", "Qwen3.5-2B-Q4_K_M.gguf"),
+    "27B": ("unsloth/Qwen3.6-27B-GGUF", "Qwen3.6-27B-Q3_K_M.gguf"),
 }
 
 # Clothing tagger — marqo-fashionCLIP (CLIP fine-tuned on fashion), ONNX int8 so

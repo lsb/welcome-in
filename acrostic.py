@@ -169,13 +169,20 @@ class AcrosticDecoder:
                  min_line: int = DEFAULT_MIN_LINE, max_line: int = DEFAULT_MAX_LINE,
                  repeat_penalty: float = 1.2,
                  temperature: float = 0.3, top_p: float = 0.95, top_k: int = 30,
-                 frequency_penalty: float = 0.4, presence_penalty: float = 0.0):
+                 frequency_penalty: float = 0.4, presence_penalty: float = 0.0,
+                 no_think: bool = False):
         from llama_cpp import LlamaGrammar
 
         self.llm = llm
         self.paragraphs = paragraphs
         self.min_line = min_line
         self.max_line = max_line
+        # Reasoning models (e.g. Qwen3.6) open a <think> block at the start of the
+        # assistant turn and ignore the prompt's /no_think; under the acrostic
+        # grammar the first forced token then lands *inside* the think block, so the
+        # model's chain-of-thought becomes the card. With no_think set we close an
+        # empty think block before generation so the grammar masks the real answer.
+        self.no_think = no_think
         # The acrostic forces ~800 characters of prose out of a 0.8B model that
         # only has a few true things to say, so left alone it pads and sometimes
         # loops ("Enjoy it. Let's go." over and over). A modest temperature keeps
@@ -214,10 +221,20 @@ class AcrosticDecoder:
                 template=md["tokenizer.chat_template"],
                 eos_token="<|im_end|>", bos_token="", add_generation_prompt=True,
             )
-        return self._formatter(messages=[
+        prompt = self._formatter(messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ]).prompt
+        if self.no_think:
+            # Force the think block closed so the grammar masks the actual answer,
+            # not the model's reasoning. The chat template may already have opened
+            # one (ends with "<think>") — then just close it; otherwise inject a
+            # whole empty block.
+            if prompt.rstrip("\n").endswith("<think>"):
+                prompt = prompt.rstrip("\n") + "\n</think>\n\n"
+            else:
+                prompt += "<think>\n\n</think>\n\n"
+        return prompt
 
     def generate(self, system: str, user: str, seed: int | None = None,
                  on_delta=None, abort=None) -> str:

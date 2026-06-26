@@ -8,13 +8,19 @@
     more reliable than a 0.8B model that tends to parrot the example outfits; the
     two greetings that used to seed the model's prompt are now templates themselves.
   Part 2 — the question card: a few short, open questions about generative AI, on
-    one of seventeen randomly chosen themes (questions.py), so the visitor argues and
-    wonders for themselves rather than watching passively. A small Qwen3.5 (GGUF, CPU
-    via llama-cpp-python) generates it UNDER the acrostic mask (acrostic.py; grammar
-    idea from github.com/lsb/sidechat) — its length suits a handful of questions.
+    one of seventeen themes (questions.py), so the visitor argues and wonders for
+    themselves rather than watching passively. The card is hidden-acrostic copy.
 
-The model is loaded lazily so nothing heavy happens until a visitor faces the
-camera; only the question card (Part 2) uses it.
+Two ways the card is produced:
+  * **Pooled (the kiosk):** when a ``CardPool`` is supplied, ``greet()`` does NO
+    model work — it pulls the least-viewed pre-generated card (pool.py, filled by
+    the 27B producer) and returns it instantly; the kiosk then types it to screen.
+  * **Live (main.py / offline):** with no pool, ``greet()`` generates the card on
+    the spot with a small Qwen3.5 under the acrostic mask (acrostic.py; grammar
+    idea from github.com/lsb/sidechat), streaming as it writes — the original path,
+    kept for the CLI and tests.
+
+The live model is loaded lazily; the pooled path loads no model at all.
 """
 
 from __future__ import annotations
@@ -80,16 +86,41 @@ class Greeting:
     topic: str
 
 
+# Safety net for the pooled path: if the pool is somehow empty (it shouldn't be —
+# warmup seeds one card before the door opens), serve this static card so a visitor
+# never faces a blank. Its stanzas spell SLOP / TIAT / LEEB like the real cards.
+_FALLBACK_TOPIC = "What is generative AI content like ChatGPT as an aesthetic condition?"
+_FALLBACK_CARD = (
+    "Should a picture made in a second still move you the way a painting does?\n"
+    "Look closely; can you tell what a person meant from what a machine made?\n"
+    "Or does it matter who made it, as long as it makes you think?\n"
+    "Pause here a moment before you decide what this is worth to you.\n"
+    "\n"
+    "Trust your first reaction, or the story behind how it was made?\n"
+    "Is a question worth more than an answer in a room like this?\n"
+    "Ask the stranger beside you what they see, and whether you agree.\n"
+    "Take one idea home with you and argue about it tonight.\n"
+    "\n"
+    "Look again; what changes when you know a model wrote these words?\n"
+    "Everyone can make this now, so what makes any of it worth stopping for?\n"
+    "Even a perfect copy leaves something out; what is missing here?\n"
+    "Begin a conversation, not a verdict."
+)
+
+
 class Greeter:
     def __init__(self, size: str = "0.8B", n_ctx: int = 2048, n_threads: int | None = None,
                  paragraphs: tuple[str, ...] | None = None,
-                 min_line: int | None = None, max_line: int | None = None):
+                 min_line: int | None = None, max_line: int | None = None,
+                 pool=None):
         self.size = size
         self.n_ctx = n_ctx
         self.n_threads = n_threads
-        # The acrostic constraint (used for the Part 2 question card) comes from the
-        # environment (WELCOME_ACROSTIC / WELCOME_MIN_LINE / WELCOME_MAX_LINE) so it
-        # can be tuned without code edits; an explicit argument still wins.
+        # When a CardPool is given, the card comes pre-generated from the pool and no
+        # model is loaded; the size/paragraph fields below are used only by the live
+        # fallback (no pool). The live acrostic constraint comes from the environment
+        # (WELCOME_ACROSTIC / WELCOME_MIN_LINE / WELCOME_MAX_LINE); an explicit arg wins.
+        self.pool = pool
         env_paragraphs, env_min, env_max = acrostic_from_env()
         self.paragraphs = env_paragraphs if paragraphs is None else paragraphs
         self.min_line = env_min if min_line is None else min_line
@@ -99,8 +130,10 @@ class Greeter:
         self._hello_i = 0        # round-robin cursor over _HELLO_TEMPLATES
 
     def load(self) -> "Greeter":
-        """Eagerly load the model + compile the grammar (so callers can time it)."""
-        self._ensure_card_decoder()
+        """Eagerly prepare the card source so callers can time it. With a pool this
+        is a no-op (no model); without one it loads the live model + grammar."""
+        if self.pool is None:
+            self._ensure_card_decoder()
         return self
 
     def _ensure_llm(self):
@@ -140,18 +173,29 @@ class Greeter:
         GenerationAborted, which the kiosk catches to drop the half-written card.
 
         How many faces are turned to the camera (``face.facing_count``) decides
-        whether the hello is addressed to one visitor or to the group in the plural."""
-        card_dec = self._ensure_card_decoder()
+        whether the hello is addressed to one visitor or to the group in the plural.
+
+        With a pool, the card is pulled pre-generated (no model, no streaming) and the
+        kiosk types it to screen itself; ``on_delta`` here just emits hello + card whole
+        for non-kiosk callers. Without a pool, the card is generated live and streamed."""
         group_size = max(1, getattr(face, "facing_count", 1) or 1)
-        # Part 1: rendered instantly from the next template (no model). Emit it as one
-        # delta so a live display shows the hello at once, then streams the card.
+        # Part 1: rendered instantly from the next template (no model).
         hello = render_hello(compliment, group_size, self._next_hello_index())
-        if on_delta:
-            on_delta("hello", hello)
-        topic = pick_topic()
-        questions = card_dec.generate(
-            QUESTIONS_SYSTEM, build_questions_prompt(topic),
-            on_delta=(lambda d: on_delta("card", d)) if on_delta else None, abort=abort)
+        if self.pool is not None:
+            card = self.pool.take_least_viewed()
+            topic, questions = ((card.topic, card.text) if card is not None
+                                else (_FALLBACK_TOPIC, _FALLBACK_CARD))
+            if on_delta:
+                on_delta("hello", hello)
+                on_delta("card", questions)
+        else:
+            card_dec = self._ensure_card_decoder()
+            if on_delta:
+                on_delta("hello", hello)   # emit hello, then stream the live card
+            topic = pick_topic()
+            questions = card_dec.generate(
+                QUESTIONS_SYSTEM, build_questions_prompt(topic),
+                on_delta=(lambda d: on_delta("card", d)) if on_delta else None, abort=abort)
         return Greeting(hello=hello, questions=questions, topic=topic)
 
     def _next_hello_index(self) -> int:
