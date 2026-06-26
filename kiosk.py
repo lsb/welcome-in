@@ -12,9 +12,11 @@ Structure — one generation stream, two sinks, behind a clean seam:
   ----------------------         --------------------------------
   camera.frame()                 drains a queue every ~33 ms and is the *only*
   gate.analyze()       --push-->  thing that touches widgets (Tk isn't thread-
-  on fire: greeter.greet(on_delta)  safe). Streamed deltas append live; on
-    -> screen deltas + final     "settle" the screen snaps to the finished text;
-    -> printer.print_card()      the printer fires once, complete.
+  on fire: greeter.greet(on_delta)  safe). The question the model answers shows
+    -> screen deltas + final     first; its streamed card is then revealed a word
+    -> printer.print_card()      every 0.1s so the long run reads as steady
+                                 activity; on "settle" the screen snaps to the
+                                 finished text and the printer fires once, complete.
 
 The screen is the live-text sink. Reskinning it (web / pygame) means swapping
 ``_handle`` / ``_build_ui`` — the capture/detect/greet loop and the sinks don't
@@ -106,7 +108,9 @@ class Kiosk:
 
         # Live accumulators for the two streamed parts (touched on the UI thread).
         self._hello = ""
-        self._card = ""
+        self._card = ""            # raw streamed card text, revealed a word at a time
+        self._card_shown = 0       # chars of _card currently on screen (word reveal)
+        self._card_settled = False  # the model has finished; reveal the tail in full
         # Latest values behind the discreet debug readout (UI thread only).
         self._dbg: dict = {}
 
@@ -116,6 +120,7 @@ class Kiosk:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
         self.root.after(33, self._drain)
+        self.root.after(100, self._tick_words)
         self.root.mainloop()
 
     def _post(self, msg: tuple) -> None:
@@ -434,6 +439,8 @@ class Kiosk:
             self._painted.set()
         elif kind == "begin":
             self._hello = self._card = ""
+            self._card_shown = 0
+            self._card_settled = False
             self.hello_label.config(font=self._hello_font)
             self.hello_var.set("")
             self.topic_var.set("")
@@ -446,13 +453,19 @@ class Kiosk:
             if msg[1] == "hello":
                 self._hello += msg[2]
                 self.hello_var.set(self._hello)
+            elif msg[1] == "topic":
+                # The question the model is about to answer — shown before its output.
+                self.topic_var.set(f"- {msg[2]} -")
             else:
+                # Accumulate raw card text; _tick_words reveals it a word at a time.
                 self._card += msg[2]
-                self.card_var.set(self._card)
         elif kind == "settle":
             _, hello, topic, questions = msg
             self.hello_var.set(hello)
             self.topic_var.set(f"- {topic} -")
+            self._card = questions
+            self._card_shown = len(questions)
+            self._card_settled = True
             self.card_var.set(questions)
             self.status_var.set("your card is printing - take it as you come in"
                                 if self.printer.enabled
@@ -469,11 +482,35 @@ class Kiosk:
         over its subtitle, with no half-written card left behind. This is what the
         empty gallery shows while we wait for someone to gate."""
         self._hello = self._card = ""
+        self._card_shown = 0
+        self._card_settled = False
         self.hello_label.config(font=self._idle_font)
         self.hello_var.set(_IDLE_HELLO)
         self.topic_var.set(_IDLE_SUBTITLE)
         self.card_var.set("")
         self.status_var.set("")
+
+    def _tick_words(self) -> None:
+        """Reveal the streamed question card one word every tenth of a second, so the
+        long model run reads as words steadily landing — a visible sign the kiosk is
+        alive and writing — rather than as bursts of raw tokens (or a frozen screen
+        during the first-token wait). On the Pi the model writes slower than this, so
+        the reveal simply tracks generation; on a fast machine it paces it. Slicing
+        the raw text directly preserves the acrostic's line breaks and spacing."""
+        raw, i = self._card, self._card_shown
+        if i < len(raw):
+            j = i
+            while j < len(raw) and raw[j].isspace():   # leading space rides the word
+                j += 1
+            while j < len(raw) and not raw[j].isspace():
+                j += 1
+            # Reveal a word only once it's complete: there is whitespace after it, or
+            # the model has settled — so a half-streamed token never flashes up.
+            if self._card_settled or j < len(raw):
+                self._card_shown = j
+                self.card_var.set(raw[:j])
+        if not self._closing:
+            self.root.after(100, self._tick_words)
 
     def _render_debug(self) -> None:
         """Paint the discreet lower-right readout from the latest variables. Every
