@@ -1,0 +1,8 @@
+# topic: What is the role of trust, credibility, and post-truth aesthetics in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you believe a story because it sounds true, or only if someone can prove they lived it?
+Let the machine write your apology letter to save time. Does that make it more honest or less human?
+Once we stop caring who wrote what, does truth still matter at all?
+Pretend this text was written by an AI.

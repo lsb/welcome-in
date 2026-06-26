@@ -1,0 +1,8 @@
+# topic: What is generative AI content like ChatGPT as an aesthetic condition?
+# model: 27B
+# provisional: 0
+
+Should you feel guilty for enjoying something that no human hand touched?
+Look at this text: can you tell if it was written by a person or an algorithm, and does the answer m
+ove your heart differently?
+Prompting is like ordering food from a menu; are we becoming critics of taste rather than creators?

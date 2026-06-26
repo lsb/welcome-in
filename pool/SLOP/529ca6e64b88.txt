@@ -1,0 +1,8 @@
+# topic: What is an embodiment of generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you treat this text like a conversation with another person, or just read it as data?
+Let someone else write your apology letter. Are they still sorry if the words are perfect but not in
+or their voice? If an AI writes a poem that makes you cry, does it matter who wrote it? Who owns the
+personality of this text: the user typing prompts or the model generating them?

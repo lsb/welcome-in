@@ -1,0 +1,8 @@
+# topic: What is generative AI content like ChatGPT as a social condition?
+# model: 27B
+# provisional: 0
+
+Should we be worried that our children will grow up thinking conversation is just a prompt?
+Lying to an AI feels like cheating on yourself; does it matter who you're fooling when the machine's
+opinion doesn't exist anyway?
+Pretending your essay was written by ChatGPT, or admitting it and getting caught.

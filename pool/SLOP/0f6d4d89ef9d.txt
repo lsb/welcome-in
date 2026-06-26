@@ -1,0 +1,8 @@
+# topic: What is the weaponization of generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you trust a message from your boss if it sounds too perfect?
+Let the AI write your apology, or risk saying something wrong yourself?
+Once lies are cheap and instant, how do we know what's real anymore?
+Protecting truth with more machines: does that make sense to you?

@@ -1,0 +1,8 @@
+# topic: What is a surrender to generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Surrendering to AI feels like giving up control. Is that a relief or a loss?
+Letting the machine write your email, do you feel smarter for outsourcing it or dumber for not doing
+outsource thinking is cheating on yourself? Or just efficient?
+Prompt engineering vs.

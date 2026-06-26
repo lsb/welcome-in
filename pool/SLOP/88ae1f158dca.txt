@@ -1,0 +1,8 @@
+# topic: What is the role of attention, engagement, and optimization in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you trust what feels right or what is actually true?
+Let the algorithm decide your next click, or fight for control of your own focus?
+Optimize everything until life becomes efficient but empty. Is that progress or a trap?
+Pay attention to be seen by machines instead of people.

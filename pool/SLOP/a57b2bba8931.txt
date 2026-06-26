@@ -1,0 +1,8 @@
+# topic: What is the role of synthetic intimacy and emotional attachment to generated systems in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you tell a machine how much it means to you?
+Let the algorithm know your deepest fears. Does that make them yours, or just data points for its 's
+or does it feel like being watched by something that doesn't care?
+Pretend this chatbot is your best friend.

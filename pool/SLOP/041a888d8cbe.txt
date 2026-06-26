@@ -1,0 +1,8 @@
+# topic: What is the role of meme propagation and information decay in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we feel guilty for sharing a joke that might be slightly wrong?
+Like, if you pass on a meme and it changes the meaning just a tiny bit... is that your fault or the
+original creator's? If an AI writes something funny but totally made up, does laughing make us comp-
+plicit in spreading nonsense?

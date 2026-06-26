@@ -1,0 +1,8 @@
+# topic: What is the role of authorship, attribution, and remix culture in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should the person who typed the prompt get credit, or is it just a fancy search engine?
+Let's say you fix up an AI drawing until it looks like yours. Is that cheating or creating?
+Or do we owe something to all the artists whose work trained this thing in the first place?
+Plagiarism used to mean copying someone else; now, does remixing data count as theft too?

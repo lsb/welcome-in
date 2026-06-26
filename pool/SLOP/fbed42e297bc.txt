@@ -1,0 +1,8 @@
+# topic: What is the role of automation, bureaucracy, and interface rituals in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you feel guilty for letting a machine do the boring parts of your job?
+Like, if ChatGPT writes the email draft but you hit send... who's responsible when it goes wrong?
+Or is that just us making excuses to avoid doing actual work anymore?
+Prompting feels like typing into a void.

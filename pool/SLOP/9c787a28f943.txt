@@ -1,0 +1,8 @@
+# topic: What is the role of surveillance and algorithmic visibility in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you be worried that your conversations are training the very thing talking back to you?
+Like, if a machine learns from us, does it become more like us or just better at pretending to be us
+or is it something else entirely. Do we want our digital footprints to shape what AI says next time?
+Privacy feels old when everything's being watched and used for content creation now anyway right?

@@ -1,0 +1,8 @@
+# topic: What is the role of realism, hallucination, and machine perception in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we trust what looks real or what feels true?
+Let the machine dream, or force it to be precise?
+Or is a useful lie better than an inconvenient truth?
+Praise its creativity for seeing things that aren't there.

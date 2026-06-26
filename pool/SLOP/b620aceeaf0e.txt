@@ -1,0 +1,8 @@
+# topic: What is the role of glitches, compression artifacts, and degraded media in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should we fix the errors or keep them as proof it wasn't human?
+Look at that weird hand. Does it make you laugh, feel uneasy, or just scroll past?
+Once a file is compressed enough to look like static, does it still mean anything?
+Pretend this text was written by mistake versus on purpose.

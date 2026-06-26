@@ -1,0 +1,8 @@
+# topic: What is the role of invisible digital labor in generative AI content like ChatGPT?
+# model: 27B
+# provisional: 0
+
+Should you feel guilty every time you hit enter?
+Look at the screen. Do you see a miracle or a sweatshop?
+One person types, thousands click buttons to make it work. Who gets credit for this sentence?
+Pay your AI subscription fee with pride, or do you wonder where that money really goes?
