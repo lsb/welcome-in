@@ -33,7 +33,6 @@ import re
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 from acrostic import GenerationAborted
 from acrostics import acrostics_signature, load_acrostics
@@ -90,8 +89,7 @@ class Kiosk:
     def __init__(self, cam_index: int = 0, fullscreen: bool = True,
                  detect_interval: float = 0.1, dwell: float = 0.0, min_show: float = 8.0,
                  abort_after: float = 1.5, clear_after: float = 4.0, cooldown: float = 3.0,
-                 near_prox: float = 0.10, warmup: bool = True,
-                 warmup_image: str = "6.png", pool_root: str = "pool",
+                 near_prox: float = 0.10, pool_root: str = "pool",
                  pool_cap: int = 100, acrostics_csv: str | None = None,
                  word_ms: int = 30, producer_enabled: bool = True,
                  producer_model: str = "27B", producer_threads: int | None = None,
@@ -105,8 +103,6 @@ class Kiosk:
         self.clear_after = clear_after           # re-arm once gone this long
         self.cooldown = cooldown                 # stay quiet this long after a greeting ends
         self.near_prox = near_prox               # min face box height to count as near
-        self.warmup = warmup                     # warm BlazeFace + CLIP on startup
-        self.warmup_image = warmup_image
         # Pool / serving: the card comes pre-generated from the pool; the live
         # serve path does no model work (it types the pulled card to screen).
         self.acrostics = load_acrostics(acrostics_csv)
@@ -116,7 +112,7 @@ class Kiosk:
         self.producer_enabled = producer_enabled # run the 27B background producer
         self.producer_model = producer_model
         self.producer_threads = producer_threads
-        self.producer = None                     # PoolProducer, started after warmup
+        self.producer = None                     # PoolProducer, started in _run
         # Idle screen: rotate a separate pool of static single-acrostic (SLOP) cards
         # under the WELCOME headline while waiting. Signature tracks the first
         # configured acrostic, so pool/<first>/ (e.g. pool/SLOP/) holds them.
@@ -185,8 +181,9 @@ class Kiosk:
             self.camera = Camera(index=self.cam_index)
             self._post(("config", self.signature, f"<={self.pool.cap}/q",
                         self.producer_model if self.producer_enabled else "serve-only"))
-            if self.warmup:
-                self._warmup()
+            # No warmup pass: the detect loop below warms BlazeFace on its first frame
+            # (before any visitor), CLIP warms on the first greeting, and serving loads
+            # no model — so a dedicated warm-up would just repeat one live iteration.
             # Start the background producer to top the pool up past the committed floor.
             if self.producer_enabled:
                 from producer import PoolProducer
@@ -206,31 +203,6 @@ class Kiosk:
         self._detect_thread = threading.Thread(target=self._detect_loop, daemon=True)
         self._detect_thread.start()
         self._control_loop()
-
-    def _warmup(self) -> None:
-        """Warm the only models the serve path uses — BlazeFace + CLIP — on a sample
-        image, so the first visitor doesn't pay first-call overhead. Nothing else
-        loads at startup: the cards are pre-generated in the committed pool, so there
-        is no generation model to seed here (an empty pool falls back to greeter's
-        static card). This is the whole of "do nothing for startup but detect + read
-        clothing + serve text"."""
-        img = Path(self.warmup_image)
-        if not img.is_absolute():
-            img = Path(__file__).resolve().parent / img   # robust to a service cwd
-        self._post(("status", "warming up the gallery..."))
-        try:
-            t_det = time.perf_counter()
-            res = self.gate.analyze(str(img))
-            det_ms = (time.perf_counter() - t_det) * 1000.0
-            t_clip = time.perf_counter()
-            self.tagger.compliment(str(img), res.box)      # warm CLIP / ORT
-            clip_ms = (time.perf_counter() - t_clip) * 1000.0
-            print(f"[kiosk] warmup {img.name}: detect {det_ms:.0f}ms  clip {clip_ms:.0f}ms")
-            self._post(("timing", det_ms, clip_ms, 0.0))
-        except FileNotFoundError:
-            print(f"[kiosk] warmup image {img} not found; skipping detector/CLIP warm")
-        except Exception as e:
-            print(f"[kiosk] detector/CLIP warm failed: {e}")
 
     def _detect_loop(self) -> None:
         """Capture + detect, forever, on its own thread. Publishes a Snapshot per
@@ -650,10 +622,6 @@ def main(argv: list[str] | None = None) -> int:
                    help="stay quiet this long after a greeting ends, before re-arming (default 3)")
     p.add_argument("--near-prox", type=float, default=0.10,
                    help="min face box height (0..1) to count as a near visitor (default 0.10)")
-    p.add_argument("--no-warmup", dest="warmup", action="store_false",
-                   help="skip the startup BlazeFace + CLIP warm")
-    p.add_argument("--warmup-image", default="6.png",
-                   help="image for the startup warmup pass (default: 6.png)")
     # Pool / producer
     p.add_argument("--pool-root", default="pool", help="card pool directory (default: pool)")
     p.add_argument("--pool-cap", type=int, default=100,
@@ -675,7 +643,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     Kiosk(cam_index=args.cam, fullscreen=not args.windowed,
           dwell=args.dwell, abort_after=args.abort_after, cooldown=args.cooldown,
-          near_prox=args.near_prox, warmup=args.warmup, warmup_image=args.warmup_image,
+          near_prox=args.near_prox,
           pool_root=args.pool_root, pool_cap=args.pool_cap, acrostics_csv=args.acrostics_csv,
           word_ms=args.word_ms, producer_enabled=args.producer_enabled,
           producer_model=args.producer_model, producer_threads=args.producer_threads,
