@@ -43,6 +43,18 @@ from pool import CardPool
 from printer import Printer
 
 _BG = "#0a0a0a"
+_CARD_FG = "#e6e6e6"   # normal card text colour; the idle fade interpolates to _BG
+_IDLE_FADE_STEPS = 16  # colour-interpolation steps for the idle card fade-out
+_IDLE_FADE_MS = 50     # ms per fade step (~0.8 s total)
+
+def _lerp_color(a: str, b: str, t: float) -> str:
+    """Interpolate between two #rrggbb colours (t in 0..1) for the idle fade."""
+    ar, ag, ab = int(a[1:3], 16), int(a[3:5], 16), int(a[5:7], 16)
+    br, bg, bb = int(b[1:3], 16), int(b[3:5], 16), int(b[5:7], 16)
+    return "#%02x%02x%02x" % (round(ar + (br - ar) * t),
+                              round(ag + (bg - ag) * t),
+                              round(ab + (bb - ab) * t))
+
 
 # What the screen says when nobody's been gated yet — the inviting default that
 # greets the empty gallery instead of a small grey "waiting". The headline rides
@@ -83,7 +95,8 @@ class Kiosk:
                  warmup_image: str = "6.png", pool_root: str = "pool",
                  pool_cap: int = 100, acrostics_csv: str | None = None,
                  word_ms: int = 30, producer_enabled: bool = True,
-                 producer_model: str = "27B", producer_threads: int | None = None):
+                 producer_model: str = "27B", producer_threads: int | None = None,
+                 idle_hold_s: float = 10.0, idle_enabled: bool = True):
         self.model = model                       # warmup/seed model (small, e.g. 0.8B)
         self.cam_index = cam_index
         self.fullscreen = fullscreen
@@ -106,6 +119,15 @@ class Kiosk:
         self.producer_model = producer_model
         self.producer_threads = producer_threads
         self.producer = None                     # PoolProducer, started after warmup
+        # Idle screen: rotate a separate pool of static single-acrostic (SLOP) cards
+        # under the WELCOME headline while waiting. Signature tracks the first
+        # configured acrostic, so pool/<first>/ (e.g. pool/SLOP/) holds them.
+        self.idle_enabled = idle_enabled
+        self.idle_hold_s = idle_hold_s
+        self.idle_pool = CardPool(pool_root, cap=pool_cap,
+                                  signature=acrostics_signature((self.acrostics[0],)))
+        self._idle_running = False               # ambient rotation active (UI thread)
+        self._idle_epoch = 0                      # bump to invalidate pending after() steps
 
         self._q: queue.Queue = queue.Queue()
         self._stop = threading.Event()
@@ -306,11 +328,15 @@ class Kiosk:
                     state = "GREETING"
                     self._post(("state", state))
                     try:
-                        self._greet(snap)            # blocks, streaming + abortable
-                        show_since = time.monotonic()
-                        state = "SHOWING"
-                    except GenerationAborted:
-                        self._post(("aborted",))     # audience left mid-greeting
+                        # Plays the whole show; prints only if still engaged at the end.
+                        if self._greet(snap):
+                            show_since = time.monotonic()
+                            state = "SHOWING"
+                        else:
+                            self._post(("clear",))   # visitor left during the show
+                            cool_since = time.monotonic()
+                            state = "COOLDOWN"
+                    except GenerationAborted:         # shutdown only
                         cool_since = time.monotonic()
                         state = "COOLDOWN"
                     self._post(("state", state))
@@ -333,12 +359,14 @@ class Kiosk:
                     self._post(("state", state))
             time.sleep(self.detect_interval)
 
-    def _greet(self, snap: Snapshot) -> None:
-        """Serve one (group of) visitor(s): read the closest person's outfit, show
-        the templated hello, pull a pre-generated card from the pool and TYPE it to
-        the screen a word at a time, then print it. No model runs here — the 27B work
-        happened in the background producer. Aborts (raising GenerationAborted) if the
-        audience leaves mid-reveal — `gone_for` keeps climbing on the detect thread."""
+    def _greet(self, snap: Snapshot) -> bool:
+        """Serve one (group of) visitor(s): read the closest person's outfit, show the
+        templated hello, pull a pre-generated card from the pool and TYPE it to the
+        screen a word at a time. The whole show always plays out — we do NOT stop for a
+        glance-away. Returns whether we printed: if the visitor is still facing at the
+        end, snap to the settled card and print (True); otherwise they left during the
+        show, so drop it with no print (False) and the caller returns to the welcome
+        rotation. Only a shutdown raises GenerationAborted."""
         self._post(("begin",))
         res, frame = snap.res, snap.frame
         t_clip = time.perf_counter()
@@ -353,25 +381,27 @@ class Kiosk:
         greeting = self.greeter.greet(res, compliment)   # instant pool pull, no model
         self._post(("delta", "hello", greeting.hello))   # hello shows at once
         t_show = time.perf_counter()
-        self._type_card(greeting.questions)              # word-by-word reveal, abortable
+        self._type_card(greeting.questions)              # full word-by-word reveal
         show_ms = (time.perf_counter() - t_show) * 1000.0
         print(f"[kiosk] detect {snap.det_ms:.0f}ms  clip {clip_ms:.0f}ms  reveal {show_ms:.0f}ms")
         self._post(("timing", snap.det_ms, clip_ms, show_ms))
 
-        # Snap the screen to the settled text (same string the printer uses) and print.
+        if not self._snap.is_facing:        # they walked off during the show -> no print
+            return False
+        # Still engaged at the end: snap to the settled text and print it for them.
         self._post(("settle", greeting.hello, greeting.topic, greeting.questions))
         self.printer.print_card(greeting)
+        return True
 
     def _type_card(self, text: str) -> None:
         """Reveal a pooled card one word every ``word_ms`` so it streams onto the
-        screen fast enough to hold interest (the model already wrote it — this is
-        pure presentation, not generation). The split keeps each word's trailing
-        whitespace, so the blank-line stanza breaks survive and the SLOP/TIAT/LEEB
-        acrostic stays column-aligned as it appears. Polls the same abort signal as
-        the old streamed path: if nobody has faced for `abort_after`, it raises
-        GenerationAborted, which `_control_loop` catches to drop the card (no print)."""
+        screen fast enough to hold interest (the model already wrote it — this is pure
+        presentation). The split keeps each word's trailing whitespace, so the
+        blank-line stanza breaks survive and the SLOP/TIAT/LEEB acrostic stays
+        column-aligned as it appears. The reveal plays out regardless of gaze (the
+        attention check is at the end, in `_greet`); only a shutdown tears it down."""
         for piece in re.findall(r"\S+\s*", text):
-            if self._stop.is_set() or self._snap.gone_for >= self.abort_after:
+            if self._stop.is_set():
                 raise GenerationAborted()
             self._post(("delta", "card", piece))
             time.sleep(self.word_ms / 1000.0)
@@ -432,9 +462,11 @@ class Kiosk:
         # The question card reads like the printed card: left-justified monospace,
         # so each acrostic line starts at the same column and the hidden first-letter
         # acrostic lines up vertically down the left edge.
-        tk.Label(self.root, textvariable=self.card_var, bg=_BG, fg="#e6e6e6",
-                 font=("Courier", 20), wraplength=wrap, justify="left",
-                 anchor="w").pack(pady=(16, 0), padx=120, anchor="w", fill="x")
+        # Held as an attribute so the idle rotation can animate its fg (fade out).
+        self.card_label = tk.Label(self.root, textvariable=self.card_var, bg=_BG,
+                 fg=_CARD_FG, font=("Courier", 20), wraplength=wrap, justify="left",
+                 anchor="w")
+        self.card_label.pack(pady=(16, 0), padx=120, anchor="w", fill="x")
 
         # Discreet admin debug readout pinned to the lower-right in near-black grey:
         # invisible across the room, legible up close if you know to look. Every
@@ -491,6 +523,7 @@ class Kiosk:
             self.root.update_idletasks()   # force pending label repaints to land now
             self._painted.set()
         elif kind == "begin":
+            self._idle_stop()        # halt the ambient rotation; the greeting takes over
             self._hello = self._card = ""
             self.hello_label.config(font=self._hello_font)
             self.hello_var.set("")
@@ -517,21 +550,80 @@ class Kiosk:
                                 else "linger on these as long as you like")
         elif kind == "clear":
             self._idle()
-        elif kind == "aborted":
-            # The audience walked off mid-greeting: drop the half-written card,
-            # print nothing, and quietly re-arm for the next visitor.
-            self._idle()
 
     def _idle(self) -> None:
-        """Return the screen to its inviting standing state: a large WELCOME IN
-        over its subtitle, with no half-written card left behind. This is what the
-        empty gallery shows while we wait for someone to gate."""
-        self._hello = self._card = ""
+        """Return the screen to its inviting standing state: a large WELCOME IN over
+        its subtitle, with the ambient SLOP rotation playing in the card area beneath.
+        Called on every "clear"; if the rotation is already running we leave the card
+        area alone (the rotation owns it) and just refresh the headline."""
+        self._hello = ""
         self.hello_label.config(font=self._idle_font)
         self.hello_var.set(_IDLE_HELLO)
         self.topic_var.set(_IDLE_SUBTITLE)
-        self.card_var.set("")
         self.status_var.set("")
+        if not self._idle_running:
+            self._card = ""
+            self.card_var.set("")
+            self.card_label.config(fg=_CARD_FG)
+        self._idle_start()
+
+    # -- ambient idle rotation (Tk main thread, via after()) -------------
+    def _idle_start(self) -> None:
+        """Begin the rotating SLOP cards under the WELCOME headline. Idempotent: a
+        no-op while already running, so repeated "clear" posts (e.g. presence flips)
+        don't restart or interrupt the current card."""
+        if not self.idle_enabled or self._idle_running:
+            return
+        self._idle_running = True
+        self._idle_epoch += 1
+        self._idle_show_next(self._idle_epoch)
+
+    def _idle_stop(self) -> None:
+        """Stop the rotation and clear the card area. Bumping the epoch invalidates
+        any pending after() step so nothing keeps typing once a greeting begins."""
+        self._idle_running = False
+        self._idle_epoch += 1
+        self.card_var.set("")
+        self.card_label.config(fg=_CARD_FG)
+
+    def _idle_show_next(self, epoch: int) -> None:
+        """Pull the least-viewed idle card and start typing it in. Stops gracefully
+        if the idle pool is empty (no pre-generated SLOP cards) — the static WELCOME
+        IN simply stays up."""
+        if epoch != self._idle_epoch:
+            return
+        card = self.idle_pool.take_least_viewed()
+        if card is None:
+            self._idle_running = False
+            return
+        self.card_label.config(fg=_CARD_FG)
+        self.card_var.set("")
+        pieces = re.findall(r"\S+\s*", card.text)   # words keep trailing space/newlines
+        self._idle_type(epoch, pieces, 0)
+
+    def _idle_type(self, epoch: int, pieces: list[str], i: int) -> None:
+        """Reveal one word every word_ms; after the last, hold then fade out."""
+        if epoch != self._idle_epoch:
+            return
+        if i < len(pieces):
+            self.card_var.set(self.card_var.get() + pieces[i])
+            self.root.after(self.word_ms, lambda: self._idle_type(epoch, pieces, i + 1))
+        else:
+            self.root.after(int(self.idle_hold_s * 1000),
+                            lambda: self._idle_fade(epoch, 0))
+
+    def _idle_fade(self, epoch: int, step: int) -> None:
+        """Fade the card text out in place (colour -> background), then rotate to the
+        next card. The typewriter build-up is the fade-in; this is the fade-out."""
+        if epoch != self._idle_epoch:
+            return
+        if step <= _IDLE_FADE_STEPS:
+            self.card_label.config(fg=_lerp_color(_CARD_FG, _BG, step / _IDLE_FADE_STEPS))
+            self.root.after(_IDLE_FADE_MS, lambda: self._idle_fade(epoch, step + 1))
+        else:
+            self.card_var.set("")
+            self.card_label.config(fg=_CARD_FG)
+            self._idle_show_next(epoch)
 
     def _render_debug(self) -> None:
         """Paint the discreet lower-right readout from the latest variables. Every
@@ -550,7 +642,7 @@ class Kiosk:
             f"prox {d.get('proximity', 0.0):.2f} (>{self.near_prox:.2f})",
             f"pose  {pose}",
             f"dwell {d.get('facing_for', 0.0):4.1f}s (>{self.dwell:.1f} fires)   "
-            f"gone {gone:4.1f}s (>{self.abort_after:.1f} abort  >{self.clear_after:.1f} clear)",
+            f"gone {gone:4.1f}s (>{self.clear_after:.1f} clear)",
             f"time  det {d.get('det_ms', 0.0):3.0f}ms  clip {d.get('clip_ms', 0.0):4.0f}ms  "
             f"greet {d.get('greet_s', 0.0):.1f}s",
             f"acr   {d.get('acrostic', '?')} {d.get('lines', '')}   model {d.get('model', '?')}",
@@ -600,13 +692,18 @@ def main(argv: list[str] | None = None) -> int:
                    help="llama n_threads for the producer (cap to spare detection)")
     p.add_argument("--no-producer", dest="producer_enabled", action="store_false",
                    help="serve from a pre-filled pool without running the producer")
+    p.add_argument("--idle-hold", type=float, default=10.0,
+                   help="seconds an idle SLOP card stays on screen before fading (default: 10)")
+    p.add_argument("--no-idle", dest="idle_enabled", action="store_false",
+                   help="disable the ambient idle-card rotation (static WELCOME IN only)")
     args = p.parse_args(argv)
     Kiosk(model=args.model, cam_index=args.cam, fullscreen=not args.windowed,
           dwell=args.dwell, abort_after=args.abort_after, cooldown=args.cooldown,
           near_prox=args.near_prox, warmup=args.warmup, warmup_image=args.warmup_image,
           pool_root=args.pool_root, pool_cap=args.pool_cap, acrostics_csv=args.acrostics_csv,
           word_ms=args.word_ms, producer_enabled=args.producer_enabled,
-          producer_model=args.producer_model, producer_threads=args.producer_threads).run()
+          producer_model=args.producer_model, producer_threads=args.producer_threads,
+          idle_hold_s=args.idle_hold, idle_enabled=args.idle_enabled).run()
     return 0
 
 
