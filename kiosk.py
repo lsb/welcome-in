@@ -401,7 +401,7 @@ class Kiosk:
         # while we engage someone, and the large standing "WELCOME IN" while we wait.
         # We hold onto it so the idle screen can swell the font and shrink it back.
         self._hello_font = ("Helvetica", 40)
-        self._idle_font = ("Helvetica", 96, "bold")
+        self._idle_font = ("Helvetica", 144, "bold")
         self.hello_label = tk.Label(self.root, textvariable=self.hello_var, bg=_BG,
                  fg="#f4f4f4", font=self._hello_font, wraplength=wrap,
                  justify="center")
