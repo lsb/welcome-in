@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="welcome-in visual-wake-word greeter")
     p.add_argument("images", nargs="*", default=DEFAULT_IMAGES,
                    help="image paths (default: 1.png 2.png 3.png)")
-    p.add_argument("--model", choices=["0.8B", "2B"], default="0.8B",
+    p.add_argument("--model", choices=["0.8B", "2B", "9B"], default="0.8B",
                    help="Qwen3.5 size (default: 0.8B)")
     p.add_argument("--debug", action="store_true", help="print detection metrics")
     p.add_argument("--no-warmup", dest="warmup", action="store_false",

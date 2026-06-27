@@ -630,7 +630,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="acrostics CSV (default: built-in SLOP/TIAT/LEEB)")
     p.add_argument("--word-ms", type=int, default=30,
                    help="screen reveal cadence, ms per word (default: 30)")
-    p.add_argument("--producer-model", choices=["0.8B", "2B", "27B"], default="27B",
+    p.add_argument("--producer-model", choices=["0.8B", "2B", "9B", "27B"], default="27B",
                    help="background producer model (default: 27B)")
     p.add_argument("--producer-threads", type=int, default=None,
                    help="llama n_threads for the producer (cap to spare detection)")
