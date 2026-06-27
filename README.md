@@ -119,6 +119,12 @@ a flowing exhibit where someone is always in frame still re-arms):
   count as a near visitor; at a doorway this keeps far wall art and passers-by out
   of the trigger with no painting-specific logic.
 
+While no one is being greeted, the standing **WELCOME IN** screen plays an ambient
+rotation of single-acrostic **SLOP** cards (`pool/SLOP/`). The background producer
+keeps that pool fresh for free: every main `SLOP/TIAT/LEEB` card it writes also has
+its first stanza — itself a complete SLOP stanza — shed into the idle pool, so the
+initial text refreshes off the same 27B run as the main text (no extra inference).
+
 A discreet near-black debug readout in the lower-right exposes every variable that
 drives the gate — face counts, the closest face's pose/proximity, the dwell
 countdown to fire and the gone countdown to abort/re-arm, stage timings, and the
