@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pool-root", default="pool", help="pool directory (default: pool)")
     p.add_argument("--acrostics-csv", default=None,
                    help="acrostics CSV (default: built-in SLOP/TIAT/LEEB)")
-    p.add_argument("--producer-model", default="27B", choices=["0.8B", "2B", "27B"],
+    p.add_argument("--producer-model", default="27B", choices=["0.8B", "2B", "9B", "27B"],
                    help="model to generate with (default: 27B)")
     p.add_argument("--pool-cap", type=int, default=100,
                    help="max cards per question (default: 100)")

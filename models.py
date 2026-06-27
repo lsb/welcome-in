@@ -5,7 +5,7 @@ warmed once and then run offline:
 
   * Face detector  - Qualcomm's MediaPipe BlazeFace ONNX export (face_detector.onnx
                      plus its external-data sidecar face_detector.data).
-  * Greeter        - Qwen3.5 GGUF (0.8B / 2B) from unsloth, fetched via huggingface_hub.
+  * Greeter        - Qwen3.5 GGUF (0.8B / 2B / 9B) from unsloth, fetched via huggingface_hub.
 """
 
 from __future__ import annotations
@@ -32,12 +32,14 @@ FACE_ONNX_ZIP_FALLBACK = (
 FACE_DIR = MODELS_DIR / "mediapipe_face-onnx-float"
 FACE_DETECTOR_ONNX = FACE_DIR / "face_detector.onnx"
 
-# GGUF greeters. Qwen3.5 0.8B/2B (Q4_K_M) are the small CPU models used for the
-# warmup seed and the live fallback; Qwen3.6 27B (Q3_K_M) is the heavy background
+# GGUF greeters. Qwen3.5 0.8B/2B/9B (Q4_K_M) are the CPU models used for the
+# warmup seed and the live fallback (9B is the largest 4-bit greeter, for boxes
+# with the RAM/headroom to spare); Qwen3.6 27B (Q3_K_M) is the heavy background
 # *producer* that pre-generates the pooled cards (reasoning off, see acrostic.py).
 GGUF_REPOS = {
     "0.8B": ("unsloth/Qwen3.5-0.8B-GGUF", "Qwen3.5-0.8B-Q4_K_M.gguf"),
     "2B": ("unsloth/Qwen3.5-2B-GGUF", "Qwen3.5-2B-Q4_K_M.gguf"),
+    "9B": ("unsloth/Qwen3.5-9B-GGUF", "Qwen3.5-9B-Q4_K_M.gguf"),
     "27B": ("unsloth/Qwen3.6-27B-GGUF", "Qwen3.6-27B-Q3_K_M.gguf"),
 }
 
