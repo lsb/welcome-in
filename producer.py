@@ -5,6 +5,11 @@ question cards into the on-disk pool (pool.py) until every question has ``cap``
 cards, then idles and tops up after serves/evictions. Serving never waits on it —
 the kiosk reads finished cards from the pool and types them out.
 
+When an idle pool is wired in, the producer also fills it as a *separate* pool of
+single-acrostic (SLOP) cards for the standing screen's ambient rotation — its own
+independent generation runs, balanced against the main pool but never mixed with
+it. Both pools share the one loaded model; that's the only thing they have in common.
+
 Two ways to run it:
   * In-process, as a daemon thread the kiosk starts after warmup (live top-up).
   * Standalone (``python producer.py …``), to pre-fill a pool offline on a faster
@@ -38,7 +43,9 @@ class PoolProducer:
     def __init__(self, pool: CardPool, acrostics: tuple[AcrosticSpec, ...],
                  model: str = "27B", topics: tuple[str, ...] = TOPICS,
                  n_threads: int | None = None, no_think: bool = True,
-                 cap: int | None = None, idle_sleep: float = 10.0):
+                 cap: int | None = None, idle_sleep: float = 10.0,
+                 idle_pool: CardPool | None = None,
+                 idle_acrostics: tuple[AcrosticSpec, ...] | None = None):
         self.pool = pool
         self.acrostics = acrostics
         self.model = model
@@ -47,10 +54,19 @@ class PoolProducer:
         self.no_think = no_think
         self.cap = cap if cap is not None else pool.cap
         self.idle_sleep = idle_sleep
+        # A separate pool of single-acrostic (SLOP) cards for the standing screen's
+        # ambient rotation, with its own acrostic set — filled by its own generation
+        # runs, never derived from the main cards. Both pools share the one loaded
+        # model and nothing else. ``idle_acrostics`` defaults to the first main
+        # acrostic alone, which is the shape the kiosk scopes the idle pool to.
+        self.idle_pool = idle_pool
+        self.idle_acrostics = (idle_acrostics if idle_acrostics is not None
+                               else (acrostics[0],) if acrostics else ())
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._llm = None
         self._decoders: dict | None = None
+        self._idle_decoders: dict | None = None
 
     # -- lifecycle -------------------------------------------------------
     def start(self) -> "PoolProducer":
@@ -71,18 +87,41 @@ class PoolProducer:
         self._decoders = build_decoders(self._llm, self.acrostics,
                                         no_think=self.no_think,
                                         temperature=PRODUCER_TEMPERATURE)
+        if self.idle_pool is not None:
+            self._idle_decoders = build_decoders(self._llm, self.idle_acrostics,
+                                                 no_think=self.no_think,
+                                                 temperature=PRODUCER_TEMPERATURE)
 
-    def _next_topic(self) -> str | None:
-        """The question most in need of cards: lowest real-card count, under cap.
-        Round-robins toward ``cap`` per topic; ``None`` when every topic is full."""
-        counts = self.pool.counts_by_topic()
-        under = sorted((counts.get(t, 0), i, t)
-                       for i, t in enumerate(self.topics)
-                       if counts.get(t, 0) < self.cap)
-        return under[0][2] if under else None
+    def _targets(self) -> list[tuple[CardPool, tuple[AcrosticSpec, ...], dict]]:
+        """The pools this producer fills, each an independent (pool, acrostics,
+        decoders) generation target. The idle pool (single-acrostic cards for the
+        standing screen) is its own target, generated separately — never derived
+        from the main cards. Main is first so ties break toward it."""
+        targets = [(self.pool, self.acrostics, self._decoders)]
+        if self.idle_pool is not None:
+            targets.append((self.idle_pool, self.idle_acrostics, self._idle_decoders))
+        return targets
 
-    def make_card(self, topic: str) -> str:
-        return synthesize_card(self._decoders, self.acrostics, topic,
+    def _next_job(self):
+        """Across every pool this producer fills, the (pool, acrostics, decoders,
+        topic) most in need of a card: lowest real-card count, under cap. Ties break
+        toward the main pool, then topic order, so the two pools fill in step rather
+        than one starving the other. ``None`` when every pool is full to cap."""
+        best = None
+        for ti, (pool, acrostics, decoders) in enumerate(self._targets()):
+            counts = pool.counts_by_topic()
+            for tj, topic in enumerate(self.topics):
+                n = counts.get(topic, 0)
+                if n < self.cap and (best is None or (n, ti, tj) < best[0]):
+                    best = ((n, ti, tj), pool, acrostics, decoders, topic)
+        return best
+
+    def make_card(self, topic: str, acrostics: tuple[AcrosticSpec, ...] | None = None,
+                  decoders: dict | None = None) -> str:
+        """Generate one card for ``topic`` from the given acrostics/decoders (the
+        main set by default; the idle set when filling the idle pool)."""
+        return synthesize_card(decoders or self._decoders,
+                               acrostics or self.acrostics, topic,
                                seed_base=time.time_ns() & 0x7FFFFFFF,
                                abort=self._stop.is_set)
 
@@ -92,14 +131,16 @@ class PoolProducer:
         except Exception as e:  # never take down the kiosk over a producer failure
             print(f"[producer] load failed: {e}")
             return
-        print(f"[producer] {self.model} ready; filling pool to {self.cap}/topic")
+        sigs = " + ".join(p.signature for p, _, _ in self._targets())
+        print(f"[producer] {self.model} ready; filling {sigs} to {self.cap}/topic")
         while not self._stop.is_set():
-            topic = self._next_topic()
-            if topic is None:                 # pool full -> idle, top up later
+            job = self._next_job()
+            if job is None:                   # all pools full -> idle, top up later
                 self._stop.wait(self.idle_sleep)
                 continue
+            _, pool, acrostics, decoders, topic = job
             try:
-                text = self.make_card(topic)
+                text = self.make_card(topic, acrostics, decoders)
             except GenerationAborted:
                 break                         # shutdown mid-card
             except CardRejected as e:
@@ -111,7 +152,7 @@ class PoolProducer:
                 continue
             if self._stop.is_set():
                 break
-            self.pool.insert_card(topic, text, model=self.model, provisional=False)
+            pool.insert_card(topic, text, model=self.model, provisional=False)
 
 
 # -- standalone pre-fill -------------------------------------------------
@@ -130,32 +171,44 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=None,
                    help="stop after generating this many cards total")
     p.add_argument("--threads", type=int, default=None, help="llama n_threads")
+    p.add_argument("--no-idle", dest="idle", action="store_false",
+                   help="don't fill the separate idle pool of single-acrostic cards")
     args = p.parse_args(argv)
 
     acrostics = load_acrostics(args.acrostics_csv)
     cap = min(args.pool_cap, args.per_topic) if args.per_topic else args.pool_cap
     pool = CardPool(args.pool_root, cap=cap, signature=acrostics_signature(acrostics))
+    # The idle pool is its own pool of single-acrostic cards (the first acrostic
+    # alone, e.g. pool/SLOP/), filled independently. Only worth a separate pool when
+    # the card has more than one stanza — with a single acrostic it would just be the
+    # main pool over again.
+    idle_acrostics = (acrostics[0],) if acrostics else ()
+    idle_pool = (CardPool(args.pool_root, cap=cap,
+                          signature=acrostics_signature(idle_acrostics))
+                 if args.idle and len(acrostics) > 1 else None)
     prod = PoolProducer(pool, acrostics, model=args.producer_model,
                         n_threads=args.threads, cap=cap,
-                        no_think=(args.producer_model == "27B"))
+                        no_think=(args.producer_model == "27B"),
+                        idle_pool=idle_pool, idle_acrostics=idle_acrostics)
 
     # Drive the loop synchronously here (no thread) so --once/--limit are simple and
     # the cards land before the process exits.
     prod._load()
     made = 0
     while True:
-        topic = prod._next_topic()
-        if topic is None:
-            print(f"[producer] pool full ({cap}/topic); done.")
+        job = prod._next_job()
+        if job is None:
+            print(f"[producer] pools full ({cap}/topic); done.")
             break
+        _, jpool, jacr, jdec, topic = job
         try:
-            text = prod.make_card(topic)
+            text = prod.make_card(topic, jacr, jdec)
         except CardRejected as e:
             print(f"[producer] dropped a leaky card, retrying topic: {e}")
             continue
-        path = pool.insert_card(topic, text, model=args.producer_model)
+        path = jpool.insert_card(topic, text, model=args.producer_model)
         made += 1
-        print(f"[producer] {made:4d}  {topic[:50]!r:52}  -> {path}")
+        print(f"[producer] {made:4d}  [{jpool.signature}]  {topic[:40]!r:42}  -> {path}")
         if args.limit is not None and made >= args.limit:
             print(f"[producer] reached --limit {args.limit}; done.")
             break
