@@ -93,7 +93,7 @@ class Kiosk:
                  pool_cap: int = 100, acrostics_csv: str | None = None,
                  word_ms: int = 30, producer_enabled: bool = True,
                  producer_model: str = "27B", producer_threads: int | None = None,
-                 idle_hold_s: float = 10.0, idle_enabled: bool = True):
+                 idle_hold_s: float = 5.0, idle_enabled: bool = True):
         self.cam_index = cam_index
         self.fullscreen = fullscreen
         self.detect_interval = detect_interval   # seconds between detections
@@ -401,7 +401,7 @@ class Kiosk:
         # while we engage someone, and the large standing "WELCOME IN" while we wait.
         # We hold onto it so the idle screen can swell the font and shrink it back.
         self._hello_font = ("Helvetica", 40)
-        self._idle_font = ("Helvetica", 96, "bold")
+        self._idle_font = ("Helvetica", 144, "bold")
         self.hello_label = tk.Label(self.root, textvariable=self.hello_var, bg=_BG,
                  fg="#f4f4f4", font=self._hello_font, wraplength=wrap,
                  justify="center")
@@ -636,8 +636,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="llama n_threads for the producer (cap to spare detection)")
     p.add_argument("--no-producer", dest="producer_enabled", action="store_false",
                    help="serve from a pre-filled pool without running the producer")
-    p.add_argument("--idle-hold", type=float, default=10.0,
-                   help="seconds an idle SLOP card stays on screen before fading (default: 10)")
+    p.add_argument("--idle-hold", type=float, default=5.0,
+                   help="seconds an idle SLOP card stays on screen before fading (default: 5)")
     p.add_argument("--no-idle", dest="idle_enabled", action="store_false",
                    help="disable the ambient idle-card rotation (static WELCOME IN only)")
     args = p.parse_args(argv)
