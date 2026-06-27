@@ -120,10 +120,10 @@ a flowing exhibit where someone is always in frame still re-arms):
   of the trigger with no painting-specific logic.
 
 While no one is being greeted, the standing **WELCOME IN** screen plays an ambient
-rotation of single-acrostic **SLOP** cards (`pool/SLOP/`). The background producer
-keeps that pool fresh for free: every main `SLOP/TIAT/LEEB` card it writes also has
-its first stanza — itself a complete SLOP stanza — shed into the idle pool, so the
-initial text refreshes off the same 27B run as the main text (no extra inference).
+rotation of single-acrostic **SLOP** cards (`pool/SLOP/`). This is a **separate pool**
+from the main `SLOP/TIAT/LEEB` cards (`pool/SLOP+TIAT+LEEB/`): the background producer
+fills both independently — never mixing them — balancing its runs so neither starves,
+with the two pools sharing only the one loaded model.
 
 A discreet near-black debug readout in the lower-right exposes every variable that
 drives the gate — face counts, the closest face's pose/proximity, the dwell

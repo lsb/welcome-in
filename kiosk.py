@@ -115,8 +115,8 @@ class Kiosk:
         self.producer = None                     # PoolProducer, started in _run
         # Idle screen: rotate a separate pool of single-acrostic (SLOP) cards under
         # the WELCOME headline while waiting. Signature tracks the first configured
-        # acrostic, so pool/<first>/ (e.g. pool/SLOP/) holds them. The producer keeps
-        # this topped up by shedding each main card's first stanza into it (_run).
+        # acrostic, so pool/<first>/ (e.g. pool/SLOP/) holds them. The producer fills
+        # this as its own independent pool, separate from the main cards (_run).
         self.idle_enabled = idle_enabled
         self.idle_hold_s = idle_hold_s
         self.idle_pool = CardPool(pool_root, cap=pool_cap,
@@ -189,17 +189,17 @@ class Kiosk:
             if self.producer_enabled:
                 from producer import PoolProducer
 
-                # Shed each main card's first (SLOP) stanza into the idle pool so the
-                # standing-screen rotation refreshes off the same run — but only when
-                # the rotation is on and the card has more than one stanza (with a lone
-                # acrostic the idle pool is the main pool, nothing separate to fill).
-                idle_pool = (self.idle_pool
-                             if self.idle_enabled and len(self.acrostics) > 1 else None)
+                # Fill the idle pool too — a separate pool of single-acrostic (SLOP)
+                # cards for the standing-screen rotation, generated independently from
+                # the main cards. Only when the rotation is on and the card has more
+                # than one stanza (with a lone acrostic it would just be the main pool).
+                fill_idle = self.idle_enabled and len(self.acrostics) > 1
                 self.producer = PoolProducer(
                     self.pool, self.acrostics, model=self.producer_model,
                     n_threads=self.producer_threads,
                     no_think=(self.producer_model == "27B"), cap=self.pool.cap,
-                    idle_pool=idle_pool).start()
+                    idle_pool=self.idle_pool if fill_idle else None,
+                    idle_acrostics=(self.acrostics[0],)).start()
             self._post(("clear",))   # drop into the standing WELCOME IN screen
         except Exception as e:  # surface startup failures on screen, don't crash silently
             self._post(("error", f"could not start: {e}"))
