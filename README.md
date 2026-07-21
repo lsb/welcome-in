@@ -146,6 +146,16 @@ WELCOME_PRINTER=off uv run python kiosk.py   # run with no printer attached
 
 The acrostic / tone env vars (above) apply to the kiosk too.
 
+## Web app
+
+`webapp/` replicates the kiosk in the browser — same BlazeFace gate (the same
+ONNX file), MobileCLIP2-S0 (fp16, 23.9 MB) instead of fashionCLIP for the
+outfit read, the same pooled cards baked into the bundle, ~24 MB of models
+total, everything served locally (no CDN). `npm run dev` there, or
+`/?selftest` to diff the browser pipeline against this repo's Python
+reference on the sample PNGs, `/?demo=5` to run without a webcam. See
+`webapp/README.md`.
+
 ## Still not wired
 
 - Speak greetings aloud (`say` on macOS, `espeak-ng`/`piper` on the Pi).
