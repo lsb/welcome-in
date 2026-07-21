@@ -1,0 +1,587 @@
+{
+  "faces": {
+    "1.png": {
+      "present": 0,
+      "facing": 0,
+      "person_present": false,
+      "facing_camera": false,
+      "proximity": 0.0,
+      "box": null,
+      "metrics": {}
+    },
+    "2.png": {
+      "present": 2,
+      "facing": 2,
+      "person_present": true,
+      "facing_camera": true,
+      "proximity": 0.0935,
+      "box": [
+        0.0861,
+        0.2908,
+        0.1796,
+        0.3843
+      ],
+      "metrics": {
+        "yaw": 0.006,
+        "ear_ratio": 0.737,
+        "roll": 5.5
+      }
+    },
+    "3.png": {
+      "present": 0,
+      "facing": 0,
+      "person_present": false,
+      "facing_camera": false,
+      "proximity": 0.0,
+      "box": null,
+      "metrics": {}
+    },
+    "4.png": {
+      "present": 2,
+      "facing": 1,
+      "person_present": true,
+      "facing_camera": true,
+      "proximity": 0.1013,
+      "box": [
+        0.0871,
+        0.2658,
+        0.1884,
+        0.3671
+      ],
+      "metrics": {
+        "yaw": 0.005,
+        "ear_ratio": 0.721,
+        "roll": 4.9
+      }
+    },
+    "5.png": {
+      "present": 2,
+      "facing": 2,
+      "person_present": true,
+      "facing_camera": true,
+      "proximity": 0.1259,
+      "box": [
+        0.4393,
+        0.1998,
+        0.5651,
+        0.3257
+      ],
+      "metrics": {
+        "yaw": -0.015,
+        "ear_ratio": 1.58,
+        "roll": -7.9
+      }
+    },
+    "6.png": {
+      "present": 2,
+      "facing": 1,
+      "person_present": true,
+      "facing_camera": true,
+      "proximity": 0.1408,
+      "box": [
+        0.4697,
+        0.4192,
+        0.6104,
+        0.56
+      ],
+      "metrics": {
+        "yaw": 0.001,
+        "ear_ratio": 1.307,
+        "roll": -6.7
+      }
+    },
+    "7.png": {
+      "present": 2,
+      "facing": 2,
+      "person_present": true,
+      "facing_camera": true,
+      "proximity": 0.2227,
+      "box": [
+        0.1303,
+        0.2057,
+        0.3529,
+        0.4283
+      ],
+      "metrics": {
+        "yaw": 0.063,
+        "ear_ratio": 1.03,
+        "roll": -7.6
+      }
+    },
+    "8.png": {
+      "present": 3,
+      "facing": 3,
+      "person_present": true,
+      "facing_camera": true,
+      "proximity": 0.0604,
+      "box": [
+        0.4791,
+        0.3682,
+        0.5395,
+        0.4286
+      ],
+      "metrics": {
+        "yaw": 0.05,
+        "ear_ratio": 0.771,
+        "roll": 0.3
+      }
+    }
+  },
+  "fashionclip": {
+    "1.png": {
+      "read": null,
+      "gconf": 0.1211
+    },
+    "2.png": {
+      "read": null,
+      "gconf": 0.1187
+    },
+    "3.png": {
+      "read": null,
+      "gconf": 0.0774
+    },
+    "4.png": {
+      "color": "beige",
+      "garment": "jacket",
+      "style": "casual",
+      "hat": false,
+      "gconf": 0.1714
+    },
+    "5.png": {
+      "color": "red",
+      "garment": "hoodie",
+      "style": "athletic",
+      "hat": false,
+      "gconf": 0.2786
+    },
+    "6.png": {
+      "color": "black",
+      "garment": "blazer",
+      "style": "formal",
+      "hat": true,
+      "gconf": 0.2158
+    },
+    "7.png": {
+      "color": "beige",
+      "garment": "polo shirt",
+      "style": "casual",
+      "hat": false,
+      "gconf": 0.2971
+    },
+    "8.png": {
+      "color": "blue",
+      "garment": "blazer",
+      "style": "formal",
+      "hat": false,
+      "gconf": 0.2579
+    }
+  },
+  "mobileclip": {
+    "vision_model.onnx": {
+      "1.png": {
+        "color": {
+          "label": "blue",
+          "conf": 0.1295
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.105
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.059
+        },
+        "hat_margin": 0.027063429355621338
+      },
+      "2.png": {
+        "color": {
+          "label": "yellow",
+          "conf": 0.1341
+        },
+        "garment": {
+          "label": "dress",
+          "conf": 0.1502
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.07
+        },
+        "hat_margin": 0.013210609555244446
+      },
+      "3.png": {
+        "color": {
+          "label": "white",
+          "conf": 0.118
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.0911
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.0708
+        },
+        "hat_margin": 0.0121854767203331
+      },
+      "4.png": {
+        "color": {
+          "label": "white",
+          "conf": 0.1807
+        },
+        "garment": {
+          "label": "hoodie",
+          "conf": 0.1758
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.0862
+        },
+        "hat_margin": -0.00168628990650177
+      },
+      "5.png": {
+        "color": {
+          "label": "red",
+          "conf": 0.2875
+        },
+        "garment": {
+          "label": "hoodie",
+          "conf": 0.2988
+        },
+        "style": {
+          "label": "athletic",
+          "conf": 0.2174
+        },
+        "hat_margin": 0.022200852632522583
+      },
+      "6.png": {
+        "color": {
+          "label": "black",
+          "conf": 0.1819
+        },
+        "garment": {
+          "label": "blazer",
+          "conf": 0.156
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.162
+        },
+        "hat_margin": 0.005890399217605591
+      },
+      "7.png": {
+        "color": {
+          "label": "brown",
+          "conf": 0.1737
+        },
+        "garment": {
+          "label": "button-up shirt",
+          "conf": 0.2082
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.1369
+        },
+        "hat_margin": -0.005865663290023804
+      },
+      "8.png": {
+        "color": {
+          "label": "navy",
+          "conf": 0.1892
+        },
+        "garment": {
+          "label": "blazer",
+          "conf": 0.2256
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.2135
+        },
+        "hat_margin": -0.0042663514614105225
+      }
+    },
+    "vision_model_fp16.onnx": {
+      "1.png": {
+        "color": {
+          "label": "blue",
+          "conf": 0.1295
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.1051
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.0593
+        },
+        "hat_margin": 0.02706432342529297
+      },
+      "2.png": {
+        "color": {
+          "label": "yellow",
+          "conf": 0.134
+        },
+        "garment": {
+          "label": "dress",
+          "conf": 0.1501
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.0699
+        },
+        "hat_margin": 0.013224616646766663
+      },
+      "3.png": {
+        "color": {
+          "label": "white",
+          "conf": 0.1181
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.0911
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.071
+        },
+        "hat_margin": 0.012203708291053772
+      },
+      "4.png": {
+        "color": {
+          "label": "white",
+          "conf": 0.1805
+        },
+        "garment": {
+          "label": "hoodie",
+          "conf": 0.1758
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.0861
+        },
+        "hat_margin": -0.0015960633754730225
+      },
+      "5.png": {
+        "color": {
+          "label": "red",
+          "conf": 0.2875
+        },
+        "garment": {
+          "label": "hoodie",
+          "conf": 0.2988
+        },
+        "style": {
+          "label": "athletic",
+          "conf": 0.2172
+        },
+        "hat_margin": 0.02210848033428192
+      },
+      "6.png": {
+        "color": {
+          "label": "black",
+          "conf": 0.1819
+        },
+        "garment": {
+          "label": "blazer",
+          "conf": 0.1562
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.1618
+        },
+        "hat_margin": 0.005880728363990784
+      },
+      "7.png": {
+        "color": {
+          "label": "brown",
+          "conf": 0.1738
+        },
+        "garment": {
+          "label": "button-up shirt",
+          "conf": 0.2081
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.137
+        },
+        "hat_margin": -0.005996972322463989
+      },
+      "8.png": {
+        "color": {
+          "label": "navy",
+          "conf": 0.1893
+        },
+        "garment": {
+          "label": "blazer",
+          "conf": 0.2257
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.2136
+        },
+        "hat_margin": -0.004292652010917664
+      }
+    },
+    "vision_model_int8.onnx": {
+      "1.png": {
+        "color": {
+          "label": "gray",
+          "conf": 0.1179
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.1061
+        },
+        "style": {
+          "label": "athletic",
+          "conf": 0.0626
+        },
+        "hat_margin": -0.0025316327810287476
+      },
+      "2.png": {
+        "color": {
+          "label": "gray",
+          "conf": 0.149
+        },
+        "garment": {
+          "label": "sweater",
+          "conf": 0.1664
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.1077
+        },
+        "hat_margin": 0.004948914051055908
+      },
+      "3.png": {
+        "color": {
+          "label": "beige",
+          "conf": 0.1023
+        },
+        "garment": {
+          "label": "denim jacket",
+          "conf": 0.113
+        },
+        "style": {
+          "label": "athletic",
+          "conf": 0.1068
+        },
+        "hat_margin": -0.010078035295009613
+      },
+      "4.png": {
+        "color": {
+          "label": "gray",
+          "conf": 0.0959
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.1152
+        },
+        "style": {
+          "label": "athletic",
+          "conf": 0.0722
+        },
+        "hat_margin": -0.008203133940696716
+      },
+      "5.png": {
+        "color": {
+          "label": "gray",
+          "conf": 0.1036
+        },
+        "garment": {
+          "label": "dress",
+          "conf": 0.1035
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.0617
+        },
+        "hat_margin": -0.020171821117401123
+      },
+      "6.png": {
+        "color": {
+          "label": "gray",
+          "conf": 0.0837
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.0894
+        },
+        "style": {
+          "label": "casual",
+          "conf": 0.0635
+        },
+        "hat_margin": 0.0059471577405929565
+      },
+      "7.png": {
+        "color": {
+          "label": "gray",
+          "conf": 0.1032
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.0716
+        },
+        "style": {
+          "label": "formal",
+          "conf": 0.0449
+        },
+        "hat_margin": -0.007296264171600342
+      },
+      "8.png": {
+        "color": {
+          "label": "gray",
+          "conf": 0.0908
+        },
+        "garment": {
+          "label": "polo shirt",
+          "conf": 0.0979
+        },
+        "style": {
+          "label": "athletic",
+          "conf": 0.0602
+        },
+        "hat_margin": -0.012586995959281921
+      }
+    }
+  },
+  "web_expected": {
+    "1.png": null,
+    "2.png": null,
+    "3.png": null,
+    "4.png": {
+      "color": "black",
+      "garment": "jacket",
+      "style": "formal",
+      "hat": false,
+      "gconf": 0.193
+    },
+    "5.png": {
+      "color": "red",
+      "garment": "hoodie",
+      "style": "athletic",
+      "hat": false,
+      "gconf": 0.3005
+    },
+    "6.png": {
+      "color": "black",
+      "garment": "blazer",
+      "style": "formal",
+      "hat": true,
+      "gconf": 0.2406
+    },
+    "7.png": {
+      "color": "gray",
+      "garment": "button-up shirt",
+      "style": "casual",
+      "hat": false,
+      "gconf": 0.2426
+    },
+    "8.png": {
+      "color": "blue",
+      "garment": "blazer",
+      "style": "formal",
+      "hat": false,
+      "gconf": 0.2759
+    }
+  }
+}

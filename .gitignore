@@ -9,5 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
-# Downloaded models (face ONNX + Qwen GGUF)
-models/
+# Downloaded models (face ONNX + Qwen GGUF); anchored so it doesn't swallow
+# webapp/public/models/
+/models/
+
+# Web app (public/models/ — the two small ONNX files + the bank — is
+# committed; webapp/scripts/prepare_models.py + make_clip_bank.py regenerate it)
+webapp/node_modules/
+webapp/dist/
+# Dev fixtures staged from the repo root by prepare_assets.mjs
+webapp/public/samples/
+# Generated from ../pool (the committed cards) on every dev/build run
+webapp/src/generated/
